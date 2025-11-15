@@ -1,6 +1,6 @@
 # QuantUS-Plugins
 
-A quantitative ultrasound (QUS) analysis framework built on an extensible plugin architecture. It processes ultrasound RF data from various manufacturers and extracts tissue characterization parameters while being accessible through both a graphical user interface (GUI) and command-line interface (CLI).
+A quantitative ultrasound (QUS) analysis framework built on an extensible plugin architecture. It processes ultrasound RF data from various manufacturers and extracts tissue characterization parameters while being accessible through both the central graphical user interface (GUI) and local command-line interface (CLI).
 
 ## Workflow overview
 
@@ -68,12 +68,7 @@ Python entrypoints to the complete workflow are ideal for supporting batch proce
 
 3. **Graphical user interface (GUI)**
 
-This GUI currently supports the complete analysis pipeline except for numerical data exporting. The GUI is accessible using
-
-```bash
-# Using .venv virtual environment
-python quantus/gui/main.py
-```
+This GUI currently supports the complete analysis pipeline except for numerical data exporting. The GUI is accessible from the QuantUS repository.
 
 4. **Parametric map viewing (3D)**
 
@@ -94,7 +89,6 @@ QuantUS follows a modular plugin-based architecture with clear separation of con
 ```
 QuantUS-Plugins/
 ├── quantus/                    # Main package
-│   ├── gui/                   # GUI application (PyQt6)
 │   ├── image_loading/         # Image loading plugins
 │   ├── seg_loading/          # Segmentation loading plugins
 │   ├── analysis/             # Analysis algorithms
