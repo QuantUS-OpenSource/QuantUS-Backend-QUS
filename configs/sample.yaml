@@ -1,0 +1,43 @@
+# Screen 1: Workflow type
+scan_loader: terason_rf
+
+# Screen 2: Scan inputs
+scan_path: PATH/TO/SAVED/SCAN.mat
+phantom_path: PATH/TO/SAVED/PHANTOM.mat
+scan_loader_kwargs:
+
+# Screen 3: Segmentation (either drawing or saved)
+seg_path: PATH/TO/SAVED/SEG.pkl
+seg_loader: pkl_roi
+seg_loader_kwargs:
+  assert_scan: False
+  assert_phantom: False
+
+# Screen 4: Analysis Type / Customization
+analysis_type: paramap
+analysis_kwargs:
+  ref_attenuation: 0.7
+  ref_bsc: 0.0006
+analysis_funcs:                             # Empty list means all functions
+  # - attenuation_coef
+
+# Screen 5: Analysis Configuration (either from GUI or saved)
+config_path: PATH/TO/SAVED/CONFIG.pkl
+config_loader: pkl_rf
+config_kwargs:
+  assert_scan: False
+  assert_phantom: False
+
+# Screen 6: Visualization Type / Customization
+visualization_type: paramap
+visualization_kwargs:
+  # paramap_folder_path: z-paramaps
+visualization_funcs:                        # Empty list means no additional functions
+  - paramaps
+  # - plot_ps_data
+
+# Screen 7: Data Export Type / Customization
+data_export_type: csv
+data_export_path: test.csv
+data_export_funcs:                          # Empty list means no functions
+  - descr_vals
