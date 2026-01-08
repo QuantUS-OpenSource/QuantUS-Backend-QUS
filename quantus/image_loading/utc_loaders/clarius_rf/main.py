@@ -5,7 +5,13 @@ from __future__ import annotations
 import os
 import numpy as np
 from pathlib import Path
-import pydicom
+
+# Optional DICOM import for overlay functionality
+try:
+    import pydicom
+    PYDICOM_AVAILABLE = True
+except ImportError:
+    PYDICOM_AVAILABLE = False
 
 # Local Module Imports
 from ....data_objs.image import UltrasoundRfImage
@@ -81,7 +87,10 @@ class EntryClass(UltrasoundRfImage):
             self.end_depth = imgInfo.endDepth1
         
         # Attempt to load DICOM image for overlay functionality
-        self._load_dicom_overlay(scan_path)
+        if PYDICOM_AVAILABLE:
+            self._load_dicom_overlay(scan_path)
+        else:
+            self.dicom_available = False
             
     def _handle_tar_file(self, file_path: str) -> str:
         """Handle tar file extraction if needed.
@@ -123,6 +132,10 @@ class EntryClass(UltrasoundRfImage):
         Args:
             scan_path (str): Path to the scan file (RF data)
         """
+        if not PYDICOM_AVAILABLE:
+            self.dicom_available = False
+            return
+            
         try:
             # Get the directory containing the RF data
             scan_dir = Path(scan_path).parent
@@ -191,6 +204,9 @@ class EntryClass(UltrasoundRfImage):
         Returns:
             bool: True if the file is a DICOM file, False otherwise
         """
+        if not PYDICOM_AVAILABLE:
+            return False
+            
         try:
             # Try to read the file as DICOM - if it succeeds, it's likely a DICOM file
             pydicom.dcmread(str(file_path), stop_before_pixels=True)
