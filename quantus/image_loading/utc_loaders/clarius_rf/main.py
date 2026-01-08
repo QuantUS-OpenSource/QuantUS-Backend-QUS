@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import numpy as np
 from pathlib import Path
+import pydicom
 
 # Local Module Imports
 from ....data_objs.image import UltrasoundRfImage
@@ -78,6 +79,9 @@ class EntryClass(UltrasoundRfImage):
             self.width = imgInfo.width1
             self.start_depth = imgInfo.startDepth1
             self.end_depth = imgInfo.endDepth1
+        
+        # Attempt to load DICOM image for overlay functionality
+        self._load_dicom_overlay(scan_path)
             
     def _handle_tar_file(self, file_path: str) -> str:
         """Handle tar file extraction if needed.
@@ -107,3 +111,89 @@ class EntryClass(UltrasoundRfImage):
             raise FileNotFoundError(f"No rf.raw file found in extracted folder: {extracted_folder}")
         
         return file_path
+    
+    def _load_dicom_overlay(self, scan_path: str) -> None:
+        """
+        Attempt to load DICOM image for overlay functionality.
+        
+        This method looks for DICOM files in the same directory as the RF data
+        and loads them for overlay display. If no DICOM files are found,
+        the overlay functionality remains disabled.
+        
+        Args:
+            scan_path (str): Path to the scan file (RF data)
+        """
+        try:
+            # Get the directory containing the RF data
+            scan_dir = Path(scan_path).parent
+            
+            # Look for DICOM files in the same directory
+            dicom_files = []
+            for file_path in scan_dir.glob("*"):
+                if file_path.is_file() and self._is_dicom_file(file_path):
+                    dicom_files.append(file_path)
+            
+            if not dicom_files:
+                # No DICOM files found, overlay not available
+                self.dicom_available = False
+                return
+            
+            # Load the first DICOM file found
+            dicom_file = dicom_files[0]
+            dicom_data = pydicom.dcmread(str(dicom_file))
+            
+            # Extract pixel data and ensure it's in the right format
+            if hasattr(dicom_data, 'pixel_array'):
+                dicom_pixels = dicom_data.pixel_array
+                
+                # Convert to grayscale if needed (handle different DICOM formats)
+                if len(dicom_pixels.shape) == 3:
+                    # RGB or multi-frame DICOM - convert to grayscale
+                    if dicom_pixels.shape[2] == 3:  # RGB
+                        dicom_pixels = np.dot(dicom_pixels[...,:3], [0.2989, 0.5870, 0.1140])
+                    elif dicom_pixels.shape[0] < dicom_pixels.shape[2]:  # Multi-frame
+                        dicom_pixels = dicom_pixels[0]  # Take first frame
+                
+                # Ensure the DICOM image matches the B-mode dimensions
+                if self.sc_bmode is not None:
+                    target_shape = self.sc_bmode.shape[:2] if len(self.sc_bmode.shape) > 2 else self.sc_bmode.shape
+                else:
+                    target_shape = self.bmode.shape[:2] if len(self.bmode.shape) > 2 else self.bmode.shape
+                
+                # Resize DICOM image to match B-mode dimensions if needed
+                if dicom_pixels.shape[:2] != target_shape:
+                    from skimage.transform import resize
+                    dicom_pixels = resize(dicom_pixels, target_shape, preserve_range=True, anti_aliasing=True)
+                
+                # Normalize to 0-255 range and convert to uint8
+                if dicom_pixels.dtype != np.uint8:
+                    dicom_pixels = ((dicom_pixels - dicom_pixels.min()) / 
+                                  (dicom_pixels.max() - dicom_pixels.min()) * 255).astype(np.uint8)
+                
+                self.dicom_image = dicom_pixels
+                self.dicom_available = True
+                
+            else:
+                self.dicom_available = False
+                
+        except Exception as e:
+            # If any error occurs during DICOM loading, disable overlay
+            print(f"Warning: Failed to load DICOM overlay: {e}")
+            self.dicom_available = False
+    
+    def _is_dicom_file(self, file_path: Path) -> bool:
+        """
+        Check if a file is a DICOM file.
+        
+        Args:
+            file_path (Path): Path to the file to check
+            
+        Returns:
+            bool: True if the file is a DICOM file, False otherwise
+        """
+        try:
+            # Try to read the file as DICOM - if it succeeds, it's likely a DICOM file
+            pydicom.dcmread(str(file_path), stop_before_pixels=True)
+            return True
+        except:
+            return False
