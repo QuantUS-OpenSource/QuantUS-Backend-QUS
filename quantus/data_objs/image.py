@@ -97,6 +97,9 @@ class UltrasoundRfImage:
                     dicom_pixels = ((dicom_pixels - dicom_pixels.min()) / 
                                   (dicom_pixels.max() - dicom_pixels.min()) * 255).astype(np.uint8)
                 
+                # Crop black regions from top and bottom
+                dicom_pixels = self._crop_black_regions(dicom_pixels)
+                
                 # Store the DICOM data
                 self.dicom_image = dicom_pixels
                 self.dicom_file_path = str(dicom_path)
@@ -114,3 +117,30 @@ class UltrasoundRfImage:
             self.dicom_image = None
             self.dicom_file_path = None
             return False
+
+    def _crop_black_regions(self, image: np.ndarray) -> np.ndarray:
+        """
+        Crop a fixed number of rows from top and bottom of the image.
+        
+        Args:
+            image: Input image as numpy array
+            
+        Returns:
+            Cropped image with specified rows removed
+        """
+        # Define fixed number of rows to crop from top and bottom
+        # You can adjust these values as needed
+        crop_top = 175   # Number of rows to crop from top
+        crop_bottom = 175  # Number of rows to crop from bottom
+        
+        # Ensure we don't crop more than the image height
+        height = image.shape[0]
+        if crop_top + crop_bottom >= height:
+            # If we try to crop too much, crop half from each side
+            crop_top = crop_bottom = height // 4
+        
+        # Crop the image
+        cropped_image = image[crop_top:height - crop_bottom, :]
+        
+        print(f"DICOM cropped: {image.shape} -> {cropped_image.shape} (removed {crop_top} from top, {crop_bottom} from bottom)")
+        return cropped_image
