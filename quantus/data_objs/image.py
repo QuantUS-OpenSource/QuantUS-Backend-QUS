@@ -42,3 +42,7 @@ class UltrasoundRfImage:
         self.sc_lateral_res: float # mm/pix
         self.sc_coronal_res: float # mm/pix
         self.sc_params_3d = None
+        
+        # DICOM overlay parameters
+        self.dicom_image: np.ndarray = None  # Original DICOM pixel data for overlay
+        self.dicom_available: bool = False   # Flag indicating if DICOM overlay is available
