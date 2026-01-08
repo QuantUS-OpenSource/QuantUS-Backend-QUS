@@ -85,6 +85,12 @@ class EntryClass(UltrasoundRfImage):
             self.width = imgInfo.width1
             self.start_depth = imgInfo.startDepth1
             self.end_depth = imgInfo.endDepth1
+        
+        # Attempt to load DICOM image for overlay functionality
+        if PYDICOM_AVAILABLE:
+            self._load_dicom_overlay(scan_path)
+        else:
+            self.dicom_available = False
             
         # Attempt to load DICOM image for overlay functionality
         if PYDICOM_AVAILABLE:
