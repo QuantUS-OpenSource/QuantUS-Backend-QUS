@@ -31,6 +31,11 @@ def get_seg_loaders() -> dict:
         if str(internal_tul_path) not in sys.path:
             sys.path.append(str(internal_tul_path))
             
+        # Internal modules in QUS depend on src.full_workflow from engines/qus/src
+        qus_engine_root = project_root / "engines" / "qus"
+        if qus_engine_root.exists() and str(qus_engine_root) not in sys.path:
+            sys.path.append(str(qus_engine_root))
+
         for item in internal_tul_path.iterdir():
             if item.is_file() and not item.name.startswith("_") and item.suffix == ".py":
                 try:
