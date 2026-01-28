@@ -63,6 +63,12 @@ def get_analysis_types() -> Tuple[dict, dict]:
     project_root = Path(__file__).parents[4]
     internal_analysis_path = project_root / "Internal-TUL" / "QuantUS-QUS" / "analysis"
     
+    if internal_analysis_path.exists():
+        # Internal modules in QUS depend on quantus.full_workflow from engines/qus/quantus
+        qus_engine_root = project_root / "engines" / "qus"
+        if qus_engine_root.exists() and str(qus_engine_root) not in sys.path:
+            sys.path.append(str(qus_engine_root))
+
     dirs_to_scan = [(current_dir, __package__)]
     if internal_analysis_path.exists():
         if str(internal_analysis_path) not in sys.path:

@@ -31,6 +31,11 @@ def get_scan_loaders() -> dict:
         if str(internal_tul_path) not in sys.path:
             sys.path.append(str(internal_tul_path))
             
+        # Internal modules in QUS depend on quantus.full_workflow from engines/qus/quantus
+        qus_engine_root = project_root / "engines" / "qus"
+        if qus_engine_root.exists() and str(qus_engine_root) not in sys.path:
+            sys.path.append(str(qus_engine_root))
+            
         for folder in internal_tul_path.iterdir():
             if folder.is_dir() and not folder.name.startswith("_"):
                 try:
