@@ -40,6 +40,7 @@ def get_seg_loaders() -> dict:
             if item.is_file() and not item.name.startswith("_") and item.suffix == ".py":
                 try:
                     module_name = item.stem
+                    # Use absolute import if sys.path includes the directory
                     module = importlib.import_module(module_name)
                     # For QUS seg loaders, we look for a dict with 'func' and 'exts'
                     # Or we look for functions decorated with @extensions
