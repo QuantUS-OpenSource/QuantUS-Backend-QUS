@@ -55,36 +55,58 @@ def get_analysis_types() -> Tuple[dict, dict]:
         dict: Dictionary of analysis types.
         dict: Dictionary of analysis functions for each type.
     """
+    import sys
     types = {}
     current_dir = Path(__file__).parent
-    for folder in current_dir.iterdir():
-        # Check if the item is a directory and not a hidden directory
-        if folder.is_dir() and not folder.name.startswith("_"):
-            try:
-                # Attempt to import the module
-                module = importlib.import_module(
-                    f".{folder.name}.framework", package=__package__
-                )
-                entry_class = getattr(module, f"{folder.name.capitalize()}Analysis", None)
-                if entry_class:
-                    types[folder.name] = entry_class
-            except ModuleNotFoundError:
-                # Handle the case where the module cannot be found
-                pass
+    
+    # 1. Check Internal-TUL for analysis types
+    project_root = Path(__file__).parents[4]
+    internal_analysis_path = project_root / "Internal-TUL" / "QuantUS-QUS" / "analysis"
+    
+    dirs_to_scan = [(current_dir, __package__)]
+    if internal_analysis_path.exists():
+        if str(internal_analysis_path) not in sys.path:
+            sys.path.append(str(internal_analysis_path))
+        dirs_to_scan.append((internal_analysis_path, None))
+
+    for scan_dir, pkg in dirs_to_scan:
+        for folder in scan_dir.iterdir():
+            if folder.is_dir() and not folder.name.startswith("_"):
+                try:
+                    if pkg:
+                        module = importlib.import_module(f".{folder.name}.framework", package=pkg)
+                    else:
+                        module = importlib.import_module(f"{folder.name}.framework")
+                        
+                    entry_class = getattr(module, f"{folder.name.capitalize()}Analysis", None)
+                    if entry_class:
+                        types[folder.name] = entry_class
+                except ModuleNotFoundError:
+                    pass
             
     functions = {}
     for type_name, type_class in types.items():
-        try:
-            module = importlib.import_module(f'.{type_name}.functions', package=__package__)
-            for name, obj in vars(module).items():
-                try:
-                    if callable(obj) and hasattr(obj, 'outputs'):
-                        functions[type_name] = functions.get(type_name, {})
-                        functions[type_name][name] = obj
-                except (TypeError, KeyError):
-                    pass
-        except ModuleNotFoundError:
-            # Handle the case where the functions module cannot be found
-            functions[type_name] = {}
+        # Try to find functions in Internal-TUL first, then public
+        func_modules = []
+        if internal_analysis_path.exists():
+            internal_func_path = internal_analysis_path / type_name / "functions.py"
+            if internal_func_path.exists():
+                func_modules.append((f"{type_name}.functions", None))
+        
+        func_modules.append((f'.{type_name}.functions', __package__))
+
+        functions[type_name] = {}
+        for mod_name, pkg in func_modules:
+            try:
+                module = importlib.import_module(mod_name, package=pkg)
+                for name, obj in vars(module).items():
+                    try:
+                        if callable(obj) and hasattr(obj, 'outputs'):
+                            if name not in functions[type_name]:
+                                functions[type_name][name] = obj
+                    except (TypeError, KeyError):
+                        pass
+            except ModuleNotFoundError:
+                pass
             
     return types, functions
