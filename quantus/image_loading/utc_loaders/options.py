@@ -1,4 +1,5 @@
 import importlib
+import sys
 from pathlib import Path
 
 from argparse import ArgumentParser
@@ -20,8 +21,35 @@ def get_scan_loaders() -> dict:
     Returns:
         dict: Dictionary of scan loaders.
     """
-    current_dir = Path(__file__).parent
     classes = {}
+    
+    # 1. Load from internal-TUL if available
+    project_root = Path(__file__).parents[4]
+    internal_tul_path = project_root / "Internal-TUL" / "QuantUS-QUS" / "image_loading"
+    
+    if internal_tul_path.exists():
+        if str(internal_tul_path) not in sys.path:
+            sys.path.append(str(internal_tul_path))
+            
+        for folder in internal_tul_path.iterdir():
+            if folder.is_dir() and not folder.name.startswith("_"):
+                try:
+                    module = importlib.import_module(f"{folder.name}.main")
+                    entry_class = getattr(module, "EntryClass", None)
+                    if entry_class:
+                        classes[folder.name] = {}
+                        classes[folder.name]['cls'] = entry_class
+                        classes[folder.name]['file_exts'] = entry_class.extensions
+                        classes[folder.name]['spatial_dims'] = entry_class.spatial_dims
+                        classes[folder.name]['gui_kwargs'] = entry_class.gui_kwargs
+                        classes[folder.name]['cli_kwargs'] = entry_class.cli_kwargs
+                        classes[folder.name]['default_gui_kwarg_vals'] = entry_class.default_gui_kwarg_vals
+                        classes[folder.name]['default_cli_kwarg_vals'] = entry_class.default_cli_kwarg_vals
+                except Exception as e:
+                    print(f"Internal module {folder.name} could not be loaded: {e}")
+
+    # 2. Load from current directory (public loaders)
+    current_dir = Path(__file__).parent
     for folder in current_dir.iterdir():
         # Check if the item is a directory and not a hidden directory
         if folder.is_dir() and not folder.name.startswith("_"):
