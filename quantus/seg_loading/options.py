@@ -31,7 +31,7 @@ def get_seg_loaders() -> dict:
         if str(internal_tul_path) not in sys.path:
             sys.path.append(str(internal_tul_path))
             
-        # Internal modules in QUS depend on src.full_workflow from engines/qus/src
+        # Internal modules in QUS depend on quantus.full_workflow from engines/qus/quantus
         qus_engine_root = project_root / "engines" / "qus"
         if qus_engine_root.exists() and str(qus_engine_root) not in sys.path:
             sys.path.append(str(qus_engine_root))
