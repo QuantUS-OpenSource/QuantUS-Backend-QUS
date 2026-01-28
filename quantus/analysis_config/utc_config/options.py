@@ -26,17 +26,63 @@ def get_config_loaders() -> dict:
     functions = {}
 
     # 1. Load from internal-TUL if available
-    project_root = Path(__file__).parents[4]
+    potential_project_roots = [
+        Path(__file__).parents[4],
+        Path(__file__).parents[5],
+    ]
+    
+    project_root = None
+    for root in potential_project_roots:
+        if (root / "Internal-TUL").exists():
+            project_root = root
+            break
+    
+    if project_root is None:
+        project_root = potential_project_roots[0]
+
     internal_tul_path = project_root / "Internal-TUL" / "QuantUS-QUS" / "configs"
 
     if internal_tul_path.exists():
-        if str(internal_tul_path) not in sys.path:
-            sys.path.append(str(internal_tul_path))
+        # Internal modules in QUS depend on quantus.full_workflow from engines/qus/quantus
+        qus_engine_root = project_root / "engines" / "qus"
+        if qus_engine_root.exists() and str(qus_engine_root) not in sys.path:
+            sys.path.append(str(qus_engine_root))
             
+        # Add the parent of Internal-TUL to sys.path
+        internal_tul_parent = project_root
+        if internal_tul_parent.exists() and str(internal_tul_parent) not in sys.path:
+            sys.path.append(str(internal_tul_parent))
+
+        # Create a mock quantus package inside Internal-TUL to satisfy relative imports
+        # if the internal modules are trying to do 'from ..full_workflow import ...'
+        # while being loaded from Internal-TUL.QuantUS-QUS.configs.module
+        internal_quantus_path = project_root / "Internal-TUL" / "QuantUS-QUS" / "quantus"
+        if not internal_quantus_path.exists():
+            try:
+                internal_quantus_path.mkdir(parents=True, exist_ok=True)
+                (internal_quantus_path / "__init__.py").touch()
+                # Link full_workflow.py from engines/qus/quantus/full_workflow.py
+                # Or just add engines/qus to sys.path and let the import system find it if we name it correctly.
+            except Exception:
+                pass
+
         for item in internal_tul_path.iterdir():
             if item.is_file() and not item.name.startswith("_") and item.suffix == ".py":
                 try:
-                    module_name = item.stem
+                    # Calculate module path relative to project_root
+                    rel_path = item.relative_to(project_root)
+                    module_name = ".".join(rel_path.with_suffix("").parts)
+                    
+                    if module_name in sys.modules:
+                        del sys.modules[module_name]
+                    
+                    # We inject a dummy 'Internal-TUL.QuantUS-QUS.full_workflow' if it's missing
+                    # since internal modules seem to expect it there.
+                    full_wf_name = "Internal-TUL.QuantUS-QUS.full_workflow"
+                    if full_wf_name not in sys.modules:
+                        import quantus.full_workflow
+                        sys.modules[full_wf_name] = quantus.full_workflow
+
                     module = importlib.import_module(module_name)
                     for name, obj in vars(module).items():
                         if callable(obj) and hasattr(obj, 'gui_kwargs'):
