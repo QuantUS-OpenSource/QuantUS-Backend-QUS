@@ -17,7 +17,38 @@ def get_seg_loaders() -> dict:
     Returns:
         dict: Dictionary of scan loaders.
     """
+    import sys
+    import importlib
+    from pathlib import Path
+
     functions = {}
+
+    # 1. Load from internal-TUL if available
+    project_root = Path(__file__).parents[4]
+    internal_tul_path = project_root / "Internal-TUL" / "QuantUS-QUS" / "processing"
+
+    if internal_tul_path.exists():
+        if str(internal_tul_path) not in sys.path:
+            sys.path.append(str(internal_tul_path))
+            
+        for item in internal_tul_path.iterdir():
+            if item.is_file() and not item.name.startswith("_") and item.suffix == ".py":
+                try:
+                    module_name = item.stem
+                    module = importlib.import_module(module_name)
+                    # For QUS seg loaders, we look for a dict with 'func' and 'exts'
+                    # Or we look for functions decorated with @extensions
+                    # Based on existing QUS seg_loading/options.py, it looks for dicts in globals()
+                    for name, obj in vars(module).items():
+                        if isinstance(obj, dict) and 'func' in obj and 'exts' in obj:
+                            functions[name] = {
+                                'func': obj['func'],
+                                'exts': obj['exts']
+                            }
+                except Exception as e:
+                    print(f"Internal module {item.name} could not be loaded: {e}")
+
+    # 2. Load from public functions
     for name, obj in globals().items():
         if type(obj) is dict:
             try:
