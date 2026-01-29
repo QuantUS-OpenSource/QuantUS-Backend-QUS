@@ -74,17 +74,22 @@ def get_analysis_types() -> Tuple[dict, dict]:
             
     functions = {}
     for type_name, type_class in types.items():
-        try:
-            module = importlib.import_module(f'.{type_name}.functions', package=__package__)
-            for name, obj in vars(module).items():
-                try:
-                    if callable(obj) and hasattr(obj, 'outputs'):
-                        functions[type_name] = functions.get(type_name, {})
-                        functions[type_name][name] = obj
-                except (TypeError, KeyError):
-                    pass
-        except ModuleNotFoundError:
-            # Handle the case where the functions module cannot be found
-            functions[type_name] = {}
+        methods_path = Path(__file__).parent / type_name / "analysis_methods"
+        for file in methods_path.iterdir():
+            try:
+                module = importlib.import_module(f'.{type_name}.analysis_methods.{file.stem}', package=__package__)
+                for name, obj in vars(module).items():
+                    try:
+                        if callable(obj) and hasattr(obj, 'outputs'):
+                            functions[type_name] = functions.get(type_name, {})
+                            functions[type_name][name] = obj
+                    except (TypeError, KeyError):
+                        pass
+            except ModuleNotFoundError:
+                # Handle the case where the functions module cannot be found
+                functions[type_name] = {}
+    
+    print("DISCOVERED TYPES:", types.keys())
+    print("DISCOVERED FUNCTIONS:", {k: list(v.keys()) for k, v in functions.items()})
             
     return types, functions

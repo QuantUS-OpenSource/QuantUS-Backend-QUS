@@ -1,6 +1,6 @@
 # Analysis plugins
 
-This directly contains all QUS analysis methods used for analysis. The plugin system enables users to extend QuantUS with new QUS methods by adding functions to `paramap/functions.py`.
+This directly contains all QUS analysis methods used for analysis. The plugin system enables users to extend QuantUS with new QUS methods by adding files to `paramap/analysis_methods` or `bmode/analysis_methods`.
 
 All analysis is currently based around parametric maps via the sliding window technique.
 
@@ -8,7 +8,7 @@ All analysis is currently based around parametric maps via the sliding window te
 
 ### Plugin Structure
 
-Each curve definition plugin should be placed in the [quantus/analysis/paramap/functions.py](paramap/functions.py) file as a new function. Specifically, the new function must be in the following form:
+Each curve definition plugin should be placed in the [quantus/analysis/paramap/analysis_methods](paramap/analysis_methods) folder as a new .py file containing a function. Specifically, the new function must be in the following form:
 
 ```python
 def METHOD_NAME(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 

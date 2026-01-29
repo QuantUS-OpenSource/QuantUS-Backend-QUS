@@ -2,7 +2,6 @@ from pathlib import Path
 
 from argparse import ArgumentParser
 
-import pkgutil
 import importlib
 from . import seg_loaders 
 
@@ -20,8 +19,9 @@ def get_seg_loaders() -> dict:
         dict: Dictionary of scan loaders.
     """
     functions = {}
-    for _, module_name, _ in pkgutil.iter_modules(seg_loaders.__path__):
-        module = importlib.import_module(f"{seg_loaders.__name__}.{module_name}")
+    loaders_path = Path(seg_loaders.__file__).parent
+    for file in loaders_path.iterdir():
+        module = importlib.import_module(f"{seg_loaders.__name__}.{file.stem}")
         for name, obj in module.__dict__.items():
             if type(obj) is dict:
                 try:
