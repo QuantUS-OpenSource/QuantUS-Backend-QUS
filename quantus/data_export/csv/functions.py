@@ -10,6 +10,7 @@ from scipy.interpolate import griddata
 from .decorators import required_kwargs
 from ...data_objs.visualizations import ParamapDrawingBase
 
+@required_kwargs()
 def descr_vals(visualizations_obj: ParamapDrawingBase, data_dict: Dict[str, str], **kwargs) -> None:
     """Compute descriptive values for each parameter in the analysis object and save to a CSV file.
     This includes mean, median, standard deviation, minimum, and maximum values.
@@ -29,6 +30,7 @@ def descr_vals(visualizations_obj: ParamapDrawingBase, data_dict: Dict[str, str]
         data_dict[f"max_{param}"] = [np.max(param_arr)]
         data_dict[f"median_{param}"] = [np.median(param_arr)]
 
+@required_kwargs()
 def hscan_stats(visualizations_obj: ParamapDrawingBase, data_dict: Dict[str, str], **kwargs) -> None:
     """Export H-scan statistics to CSV format. This includes descriptive statistics for both
     blue (high frequency) and red (low frequency) channels within the ROI.
