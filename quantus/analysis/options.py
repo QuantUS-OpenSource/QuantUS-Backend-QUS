@@ -89,7 +89,5 @@ def get_analysis_types() -> Tuple[dict, dict]:
                 # Handle the case where the functions module cannot be found
                 functions[type_name] = {}
     
-    print("DISCOVERED TYPES:", types.keys())
-    print("DISCOVERED FUNCTIONS:", {k: list(v.keys()) for k, v in functions.items()})
             
     return types, functions

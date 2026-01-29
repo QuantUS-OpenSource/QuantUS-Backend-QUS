@@ -2,7 +2,7 @@
 
 Analysis configuration loading plugins load scan metadata and parametric map parameters before analysis. Plugins support data loading from different file formats.
 
-New plugins can be added to the [quantus/analysis_config/utc_config/functions.py](utc_config/functions.py) file as a new function, and will extend the capabilities of QuantUS without any additional programming required.
+New plugins can be added to the [quantus/analysis_config/utc_config/config_loaders](utc_config/config_loaders) folder as a new .py file containing a function, and will extend the capabilities of QuantUS without any additional programming required.
 
 ## Plugin Implementation
 
@@ -37,7 +37,7 @@ Note 3D scan parameters are only required for 3D scans, and can be left as `None
 
 ### Plugin Structure
 
-Each analysis configuration loading plugin should be placed in the [quantus/analysis_config/utc_config/functions.py](functions.py) file as a new function. Specifically, the new function must be in the following form:
+Each analysis configuration loading plugin should be placed in the [quantus/analysis_config/utc_config/config_loaders](utc_config/config_loaders) file as a new .py file containing a function. Specifically, the new function must be in the following form:
 
 ```python
 def CONFIG_LOADER_NAME(analysis_path: str, **kwargs) -> RfAnalysisConfig:
@@ -47,7 +47,7 @@ where `CONFIG_LOADER_NAME` is the name of your parser. The inputs contain the st
 
 ### Decorators
 
-Metadata can be added to new segmentation parsing functions using decorators defined in [quantus/seg_loading/decorators.py](decorators.py).
+Metadata can be added to new analysis configuration loader functions using decorators defined in [quantus/analysis_config/utc_config/decorators.py](utc_config/decorators.py).
 
 * The `extensions` decorator, which specifies the required suffix of potential segmentation files.
 * The `gui_kwargs` decorator provides keyword arguments for initialization accessible from the GUI.

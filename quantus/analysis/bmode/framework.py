@@ -3,7 +3,6 @@ from typing import List
 
 from ...data_objs import UltrasoundRfImage, BmodeSeg, RfAnalysisConfig
 from ..paramap.framework import ParamapAnalysis
-from .functions import *
 
 class_name = "BmodeAnalysis"
 
@@ -11,6 +10,7 @@ class BmodeAnalysis(ParamapAnalysis):
     """
     Class to complete B-mode analysis via the sliding window technique.
     """
+
     def determine_func_order(self):
         """Determine the order of functions to be applied to the data.
         Overridden to use globals from the bmode.functions module.
@@ -30,9 +30,9 @@ class BmodeAnalysis(ParamapAnalysis):
         def process_deps(func_name):
             if func_name in self.ordered_func_names:
                 return
-            if func_name in globals():
+            if func_name in self.functions["bmode"]:
                 # Handle function dependencies and outputs
-                function = globals()[func_name]
+                function = self.functions["bmode"][func_name]
                 deps = function.deps if hasattr(function, 'deps') else []
                 results_names = function.outputs if hasattr(function, 'outputs') else []
                 for dep in deps:

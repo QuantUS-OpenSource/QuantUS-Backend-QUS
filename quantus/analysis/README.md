@@ -26,7 +26,7 @@ where `METHOD_NAME` is the name of your parser. The inputs contain the standard 
 
 ### Decorators
 
-Metadata can be added to new segmentation parsing functions using decorators defined in [src/time_series_analysis/curve_types/decorators.py](decorators.py).
+Metadata can be added to new analysis method functions using decorators defined in [paramap/decorators.py](paramap/decorators.py).
 
 * The `dependencies` decorator specifies the other functions which must be run before the current function. Typically, this is because the current function depends on the outputs of another function.
 * The `supported_spatial_dims` decorator specifies the supported spatial dimensions of a QUS method.
