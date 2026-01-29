@@ -3,7 +3,6 @@ from typing import List
 
 from ...data_objs.visualizations import ParamapDrawingBase
 from ...data_objs.data_export import BaseDataExport
-from .functions import *
 from ..options import get_data_export_types
 
 class CSVExport(BaseDataExport):
