@@ -40,18 +40,20 @@ def get_data_export_types() -> Tuple[dict, dict]:
 
     functions = {}
     for type_name, _ in types.items():
-        try:
-            module = importlib.import_module(f'.{type_name}.functions', package=__package__)
-            for name, obj in vars(module).items():
-                try:
-                    if callable(obj) and obj.__module__ == __package__ + f'.{type_name}.functions':
-                        if not isinstance(obj, type):
-                            functions[type_name] = functions.get(type_name, {})
-                            functions[type_name][name] = obj
-                except (TypeError, KeyError):
-                    pass
-        except ModuleNotFoundError:
-            # Handle the case where the functions module cannot be found
-            functions[type_name] = {}
+        methods_path = Path(__file__).parent / type_name / "export_funcs"
+        for file in methods_path.iterdir():
+            try:
+                module = importlib.import_module(f'.{type_name}.export_funcs.{file.stem}', package=__package__)
+                for name, obj in vars(module).items():
+                    try:
+                        if callable(obj) and hasattr(obj, "required_kwargs"):
+                            if not isinstance(obj, type):
+                                functions[type_name] = functions.get(type_name, {})
+                                functions[type_name][name] = obj
+                    except (TypeError, KeyError):
+                        pass
+            except ModuleNotFoundError:
+                # Handle the case where the functions module cannot be found
+                functions[type_name] = {}
             
     return types, functions

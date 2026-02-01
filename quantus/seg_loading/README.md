@@ -2,7 +2,7 @@
 
 Segmentation loading plugins load binary masks to specify where in the loaded scan to analyze. Plugins support data loading from different file formats.
 
-New plugins can be added to the [quantus/seg_loading/functions.py](functions.py) file as a new function, and will extend the capabilities of QuantUS without any additional programming required.
+New plugins can be added to the [quantus/seg_loading/seg_loaders](seg_loaders) folder as a new .py file containing a function, and will extend the capabilities of QuantUS without any additional programming required.
 
 ## Plugin Implementation
 
@@ -31,7 +31,7 @@ For 3D segmentations, the Z dimension is included in the splines list. For scans
 
 ### Plugin Structure
 
-Each segmentation loading plugin should be placed in the [quantus/seg_loading/functions.py](functions.py) file as a new function. Specifically, the new function must be in the following form:
+Each segmentation loading plugin should be placed in the [quantus/seg_loading/seg_loaders](seg_loaders) folder as a new .py file containing a function. Specifically, the new function must be in the following form:
 
 ```python
 def SEG_LOADER_NAME(image_data: UltrasoundImage, seg_path: str, **kwargs) -> BmodeSeg:
