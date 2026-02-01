@@ -28,7 +28,7 @@ To install the QuantUS platform, follow these steps. Let `PYTHON310` be the path
 
 ```bash
 git clone https://github.com/QuantUS-OpenSource/QuantUS-Backend-QUS.git
-cd QuantUS-Plugins
+cd QuantUS-Backend-QUS
 ```
 
 2. **Install the package**
