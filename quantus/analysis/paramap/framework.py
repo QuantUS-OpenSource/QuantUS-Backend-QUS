@@ -3,7 +3,7 @@ from typing import List
 
 from ...data_objs import UltrasoundRfImage, BmodeSeg, RfAnalysisConfig, ParamapAnalysisBase
 from ...data_objs.analysis import Window
-from .functions import *
+from ..options import get_analysis_types
 
 class_name = "ParamapAnalysis"
 
@@ -24,6 +24,7 @@ class ParamapAnalysis(ParamapAnalysisBase):
         
         self.analysis_kwargs = kwargs
         self.function_names = function_names
+        _, self.functions = get_analysis_types()
         self.seg_data = seg
         self.image_data = image_data
         self.config = config
@@ -53,9 +54,9 @@ class ParamapAnalysis(ParamapAnalysisBase):
         def process_deps(func_name):
             if func_name in self.ordered_func_names:
                 return
-            if func_name in globals():
+            if func_name in self.functions["paramap"]:
                 # Handle function dependencies and outputs
-                function = globals()[func_name]
+                function = self.functions["paramap"][func_name]
                 deps = function.deps if hasattr(function, 'deps') else []
                 results_names = function.outputs if hasattr(function, 'outputs') else []
                 for dep in deps:

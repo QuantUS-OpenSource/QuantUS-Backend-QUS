@@ -3,8 +3,6 @@ from pathlib import Path
 
 from argparse import ArgumentParser
 
-from .functions import *
-
 def config_loader_args(parser: ArgumentParser):
     parser.add_argument('config_path', type=str, help='Path to analysis config')
     parser.add_argument('--config_type', type=str, default='pkl_utc',
@@ -20,12 +18,15 @@ def get_config_loaders() -> dict:
         dict: Dictionary of scan loaders.
     """
     functions = {}
-    for name, obj in globals().items():
-        try:
-            if callable(obj) and obj.__module__ == __package__ + '.functions':
-                functions[name] = obj
-        except KeyError:
-            pass
+    loaders_path = Path(__file__).parent / "config_loaders"
+    for file in loaders_path.iterdir():
+        module = importlib.import_module(f".config_loaders.{file.stem}", package=__package__)
+        for name, obj in module.__dict__.items():
+            try:
+                if callable(obj) and hasattr(obj, "supported_extensions"):
+                    functions[name] = obj
+            except KeyError:
+                pass
             
     return functions
 

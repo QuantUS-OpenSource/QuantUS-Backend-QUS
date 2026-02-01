@@ -41,20 +41,22 @@ def get_visualization_types() -> Tuple[dict, dict]:
             
     functions = {}
     for type_name, type_class in types.items():
-        try:
-            module = importlib.import_module(f'.{type_name}.functions', package=__package__)
-            for name, obj in vars(module).items():
-                try:
-                    if callable(obj) and obj.__module__ == __package__ + f'.{type_name}.functions':
-                        if not isinstance(obj, type):
-                            functions[type_name] = functions.get(type_name, {})
-                            functions[type_name][name] = obj
-                except (TypeError, KeyError):
-                    pass
-        except ModuleNotFoundError as e:
-            # Handle the case where the functions module cannot be found
-            print(f"Module quantus.visualizations.{type_name}.functions could not be found: {e}")
-            functions[type_name] = {}
+        methods_path = Path(__file__).parent / type_name / "visualization_funcs"
+        for file in methods_path.iterdir():
+            try:
+                module = importlib.import_module(f'.{type_name}.visualization_funcs.{file.stem}', package=__package__)
+                for name, obj in vars(module).items():
+                    try:
+                        if callable(obj) and hasattr(obj, "deps"):
+                            if not isinstance(obj, type):
+                                functions[type_name] = functions.get(type_name, {})
+                                functions[type_name][name] = obj
+                    except (TypeError, KeyError):
+                        pass
+            except ModuleNotFoundError as e:
+                # Handle the case where the functions module cannot be found
+                print(f"Module quantus.visualizations.{type_name}.functions could not be found: {e}")
+                functions[type_name] = {}
             
     functions['paramap']['paramaps'] = None # Built-in function
             

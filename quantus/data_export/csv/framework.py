@@ -3,7 +3,7 @@ from typing import List
 
 from ...data_objs.visualizations import ParamapDrawingBase
 from ...data_objs.data_export import BaseDataExport
-from .functions import *
+from ..options import get_data_export_types
 
 class CSVExport(BaseDataExport):
     """Export parametric map data to CSV format.
@@ -12,6 +12,7 @@ class CSVExport(BaseDataExport):
                  **kwargs):
         super().__init__(visualizations_obj, output_path)
         self.function_names = function_names
+        _, self.functions = get_data_export_types() 
         self.kwargs = kwargs
         assert output_path.endswith(".csv"), "Output path must end with .csv to export to CSV format."
         
@@ -23,7 +24,7 @@ class CSVExport(BaseDataExport):
         data_dict = super().save_data()
         
         for function_name in self.function_names:
-            function = globals()[function_name]
+            function = self.functions["csv"][function_name]
             function(self.visualizations_obj, data_dict, **self.kwargs)
             
         if len(self.function_names):

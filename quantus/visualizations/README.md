@@ -1,6 +1,6 @@
 # Visualizations
 
-This directory contains plugins for generating visualizations from ultrasound analysis results. The visualization system allows you to extend QuantUS with custom plots, parameter maps, and visual outputs by adding functions to `paramap/functions.py`.
+This directory contains plugins for generating visualizations from ultrasound analysis results. The visualization system allows you to extend QuantUS with custom plots, parameter maps, and visual outputs by adding files to `paramap/visualization_funcs`.
 
 Visualization plugins transform numerical analysis results into visual representations such as parameter maps, plots, overlays, and statistical graphics. Each visualization function creates and saves specific types of visual outputs for research, clinical, or presentation purposes.
 
@@ -8,7 +8,7 @@ Visualization plugins transform numerical analysis results into visual represent
 
 ### Plugin Structure
 
-Each visualization plugin should be placed in the [quantus/visualizations/paramap/functions.py](paramap/functions.py) file as a new function. Specifically, the new function must be in the following form:
+Each visualization plugin should be placed in the [quantus/visualizations/paramap/visualization_funcs](paramap/visualization_funcs) folder as a new .py file containing a function. Specifically, the new function must be in the following form:
 
 ```python
 def VIS_NAME(analysis_obj: Any, dest_folder: str, **kwargs):

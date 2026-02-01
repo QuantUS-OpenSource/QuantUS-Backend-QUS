@@ -2,7 +2,8 @@ from pathlib import Path
 
 from argparse import ArgumentParser
 
-from .functions import *
+import importlib
+from . import seg_loaders 
 
 def seg_loader_args(parser: ArgumentParser):
     parser.add_argument('seg_path', type=str, help='Path to segmentation file')
@@ -18,14 +19,17 @@ def get_seg_loaders() -> dict:
         dict: Dictionary of scan loaders.
     """
     functions = {}
-    for name, obj in globals().items():
-        if type(obj) is dict:
-            try:
-                if callable(obj['func']) and obj['func'].__module__ == __package__ + '.functions':
-                    functions[name] = {}
-                    functions[name]['func'] = obj['func']
-                    functions[name]['exts'] = obj['exts']
-            except KeyError:
-                pass
+    loaders_path = Path(seg_loaders.__file__).parent
+    for file in loaders_path.iterdir():
+        module = importlib.import_module(f"{seg_loaders.__name__}.{file.stem}")
+        for name, obj in module.__dict__.items():
+            if type(obj) is dict:
+                try:
+                    if callable(obj['func']):
+                        functions[name] = {}
+                        functions[name]['func'] = obj['func']
+                        functions[name]['exts'] = obj['exts'] 
+                except KeyError:
+                    pass
             
     return functions

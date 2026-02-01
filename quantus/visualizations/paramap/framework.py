@@ -12,7 +12,7 @@ from ...data_objs.visualizations import ParamapDrawingBase
 from ...data_objs.analysis import ParamapAnalysisBase
 from ...data_objs.image import UltrasoundRfImage
 from ...data_objs.seg import BmodeSeg
-from .functions import *
+from ..options import get_visualization_types
 
 class_name = "ParamapAnalysis"
 
@@ -41,6 +41,7 @@ class ParamapVisualizations(ParamapDrawingBase):
         
         self.analysis_obj = analysis_obj
         self.visualization_funcs = visualization_funcs
+        _, self.functions = get_visualization_types()
         self.kwargs = kwargs
         self.numerical_paramaps = []
         self.windowed_paramap_mask = []
@@ -188,7 +189,7 @@ class ParamapVisualizations(ParamapDrawingBase):
             if func_name == "paramaps":
                 continue
             try:
-                function = globals()[func_name]
+                function = self.functions["paramap"][func_name]
                 function(self.analysis_obj, self.paramap_folder_path, **self.kwargs)
             except Exception as e:
                 print(f"ERROR: Visualization function '{func_name}' failed: {e}")
