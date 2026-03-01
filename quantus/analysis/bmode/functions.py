@@ -4,17 +4,6 @@ from ...data_objs.analysis_config import RfAnalysisConfig
 from ...data_objs.analysis import Window
 from ...data_objs.image import UltrasoundRfImage
 
-# -------------------------------------------------
-# Helper: convert 2D window to single-slice 3D volume for PyRadiomics compatibility (Z=1)
-# -------------------------------------------------
-def _make_fake_3d(arr: np.ndarray) -> np.ndarray:
-    """
-    Convert a 2D array (H, W) into a single-slice 3D array (1, H, W),
-    required by PyRadiomics on some platforms (e.g. Windows).
-    """
-
-    return arr[np.newaxis, :, :]
-
 
 @supported_spatial_dims(2, 3)
 @output_vars("bmode_mean")
@@ -352,68 +341,46 @@ def bmode_glcm_homogeneity(
     from scipy.signal import hilbert
     from radiomics import featureextractor
 
+    envelope = np.abs(hilbert(scan_rf_window, axis=0))
 
-    # Envelope detection
-    envelope = np.abs(
-        hilbert(scan_rf_window, axis=0)
-    )
+    log_env = 20*np.log10(envelope + 1e-10)
 
-
-    # Log compression → B-mode
-    log_env = 20*np.log10(
-        envelope + 1e-10
-    )
-
-
-    # Clean values
-    log_env = np.nan_to_num(
-        log_env,
-        nan=0.0,
-        posinf=0.0,
-        neginf=0.0
-    )
-
+    log_env = np.nan_to_num(log_env)
 
     image = sitk.GetImageFromArray(
         log_env.astype(np.float32)
     )
-
 
     mask_array = np.ones_like(
         log_env,
         dtype=np.uint8
     )
 
-
-    # Stabilization trick (same as contrast)
     mask_array[0,0] = 2
-
 
     mask = sitk.GetImageFromArray(mask_array)
 
     mask.CopyInformation(image)
-
 
     extractor = featureextractor.RadiomicsFeatureExtractor()
 
     extractor.disableAllFeatures()
 
     extractor.enableFeaturesByName(
-        glcm=["JointAverage"]
+        glcm=["Idm"]
     )
 
     extractor.settings["label"] = 1
-
 
     features = extractor.execute(
         image,
         mask
     )
 
-
     window.results.bmode_glcm_homogeneity = float(
-        features["original_glcm_JointAverage"]
+        features["original_glcm_Idm"]
     )
+
 
 # ------------------------------------------------------------------
 # B-mode Radiomics 2nd-Order GLCM Correlation (PyRadiomics)
