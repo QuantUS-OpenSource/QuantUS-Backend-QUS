@@ -1,61 +1,142 @@
 import numpy as np
-from scipy.signal import hilbert
-import SimpleITK as sitk
-from radiomics import featureextractor
 
-# ----------------------------
-# 1. Create a fake RF patch
-# ----------------------------
-np.random.seed(0)
-rf_patch = np.random.randn(128, 32)
+from engines.qus.quantus.analysis.bmode.functions import (
 
-print("RF patch shape:", rf_patch.shape)
+    bmode_radiomics_mean,
+    bmode_radiomics_std,
+    bmode_radiomics_median,
+    bmode_radiomics_entropy,
+    bmode_radiomics_energy,
 
-# ----------------------------
-# 2. Envelope detection
-# ----------------------------
-envelope = np.abs(hilbert(rf_patch, axis=0))
-
-print("\nEnvelope stats:")
-print("min:", envelope.min())
-print("max:", envelope.max())
-print("mean:", envelope.mean())
-print("std:", envelope.std())
-
-# ----------------------------
-# 3. Log compression (B-mode)
-# ----------------------------
-log_envelope = 20 * np.log10(envelope + 1e-10)
-
-print("\nLog-envelope (B-mode) stats:")
-print("min:", log_envelope.min())
-print("max:", log_envelope.max())
-print("mean:", log_envelope.mean())
-print("std:", log_envelope.std())
-
-# ----------------------------
-import SimpleITK as sitk
-from radiomics import featureextractor
-
-image = sitk.GetImageFromArray(log_envelope.astype(np.float32))
-mask = sitk.GetImageFromArray(
-    np.ones_like(log_envelope, dtype=np.uint8)
+    bmode_glcm_contrast,
+    bmode_glcm_homogeneity,
+    bmode_glcm_correlation,
+    bmode_glcm_energy,
 )
 
-# 🔴 CRITICAL: make image & mask compatible
-mask.CopyInformation(image)
 
-extractor = featureextractor.RadiomicsFeatureExtractor()
-extractor.disableAllFeatures()
-extractor.enableFeatureClassByName("firstorder")
+# Minimal dummy objects
+class DummyWindow:
+    class Results:
+        pass
+    results = Results()
 
-# 🔴 explicitly tell which label to use
-extractor.settings["label"] = 1
 
-features = extractor.execute(image, mask)
+class DummyConfig:
+    pass
 
-window.results.bmode_radiomics_mean = features["original_firstorder_Mean"]
 
-print("\nRadiomics results:")
-print("firstorder_Mean:", features["original_firstorder_Mean"])
-print("firstorder_Std:", features["original_firstorder_StandardDeviation"])
+class DummyImage:
+    pass
+
+
+def test_bmode_radiomics_features():
+
+    np.random.seed(0)
+
+    # dummy RF patch
+    scan_rf_window = np.random.randn(128,32).astype(np.float32)
+
+    window = DummyWindow()
+    config = DummyConfig()
+    image_data = DummyImage()
+
+
+    # -------- First Order --------
+
+    bmode_radiomics_mean(
+        scan_rf_window,
+        None,
+        window,
+        config,
+        image_data
+    )
+
+    bmode_radiomics_std(
+        scan_rf_window,
+        None,
+        window,
+        config,
+        image_data
+    )
+
+    bmode_radiomics_median(
+        scan_rf_window,
+        None,
+        window,
+        config,
+        image_data
+    )
+
+    bmode_radiomics_entropy(
+        scan_rf_window,
+        None,
+        window,
+        config,
+        image_data
+    )
+
+    bmode_radiomics_energy(
+        scan_rf_window,
+        None,
+        window,
+        config,
+        image_data
+    )
+
+
+    # -------- GLCM --------
+
+    bmode_glcm_contrast(
+        scan_rf_window,
+        None,
+        window,
+        config,
+        image_data
+    )
+
+    bmode_glcm_homogeneity(
+        scan_rf_window,
+        None,
+        window,
+        config,
+        image_data
+    )
+
+    bmode_glcm_correlation(
+        scan_rf_window,
+        None,
+        window,
+        config,
+        image_data
+    )
+
+    bmode_glcm_energy(
+        scan_rf_window,
+        None,
+        window,
+        config,
+        image_data
+    )
+
+
+    print("\nFIRST ORDER FEATURES")
+
+    print("Mean:", window.results.bmode_radiomics_mean)
+    print("Std:", window.results.bmode_radiomics_std)
+    print("Median:", window.results.bmode_radiomics_median)
+    print("Entropy:", window.results.bmode_radiomics_entropy)
+    print("Energy:", window.results.bmode_radiomics_energy)
+
+
+    print("\nGLCM FEATURES")
+
+    print("Contrast:", window.results.bmode_glcm_contrast)
+    print("Homogeneity:", window.results.bmode_glcm_homogeneity)
+    print("Correlation:", window.results.bmode_glcm_correlation)
+    print("Joint Energy:", window.results.bmode_glcm_energy)
+
+
+if __name__ == "__main__":
+
+    test_bmode_radiomics_features()
