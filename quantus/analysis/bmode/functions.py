@@ -1,9 +1,85 @@
 import numpy as np
+import SimpleITK as sitk
+from scipy.signal import hilbert
+from radiomics import featureextractor
+
 from ..paramap.decorators import supported_spatial_dims, output_vars, dependencies
 from ...data_objs.analysis_config import RfAnalysisConfig
 from ...data_objs.analysis import Window
 from ...data_objs.image import UltrasoundRfImage
 
+
+# ------------------------------------------------------------------
+# Shared helpers
+# ------------------------------------------------------------------
+
+def _get_log_envelope(rf_window: np.ndarray) -> np.ndarray:
+    """Envelope-detect an RF window and return log-compressed B-mode."""
+    envelope = np.abs(hilbert(rf_window, axis=0))
+    log_env = 20.0 * np.log10(envelope + 1e-10)
+    return np.nan_to_num(log_env, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _build_radiomics_image_and_mask(log_env: np.ndarray):
+    """
+    Wrap a log-envelope array as a pair of SimpleITK objects suitable for
+    PyRadiomics. The mask is all-ones (label = 1), covering the entire
+    window — real spatial masking is handled upstream by the QuantUS toolbox.
+    
+    A single voxel is set to label 2 at position [0,0] as a technical 
+    requirement: PyRadiomics internally validates that more than one label 
+    value exists in the mask before recognising label 1 as a valid region. 
+    This does not spatially restrict the computation in any way.
+    """
+    image = sitk.GetImageFromArray(log_env.astype(np.float32))
+    mask_array = np.ones_like(log_env, dtype=np.uint8)
+    mask_array.flat[0] = 2  # sentinel: satisfies PyRadiomics label validation
+    mask = sitk.GetImageFromArray(mask_array)
+    mask.CopyInformation(image)
+    return image, mask
+
+
+def _make_extractor(feature_class: str, feature_names: list) -> featureextractor.RadiomicsFeatureExtractor:
+    """
+    Return a RadiomicsFeatureExtractor configured to compute only the
+    requested features on label = 1.  Resampling is disabled to prevent
+    mask/image geometry mismatches on small windowed arrays.
+    """
+    extractor = featureextractor.RadiomicsFeatureExtractor()
+    extractor.disableAllFeatures()
+    extractor.enableFeaturesByName(**{feature_class: feature_names})
+    extractor.settings["label"] = 1
+    extractor.settings["resampledPixelSpacing"] = None
+    extractor.settings["interpolator"] = sitk.sitkNearestNeighbor
+    return extractor
+
+
+def _extract_feature(extractor, rf_window: np.ndarray, key: str):
+    """
+    Run PyRadiomics on a single RF window and return the named feature value.
+    Returns None if rf_window is None (e.g. phantom not provided by QuantUS).
+    """
+    if rf_window is None:
+        return None
+    log_env = _get_log_envelope(rf_window)
+    image, mask = _build_radiomics_image_and_mask(log_env)
+    return float(extractor.execute(image, mask)[key])
+
+
+def _safe_ratio(scan_val: float, phantom_val, eps: float = 1e-10) -> float:
+    """
+    Divide scan feature by phantom feature, guarding against near-zero
+    denominators.  If phantom_val is None (phantom window unavailable),
+    returns the raw scan value instead of a normalised ratio.
+    """
+    if phantom_val is None:
+        return float(scan_val)
+    return float(scan_val / (phantom_val + eps))
+
+
+# ------------------------------------------------------------------
+# Original functions (unchanged)
+# ------------------------------------------------------------------
 
 @supported_spatial_dims(2, 3)
 @output_vars("bmode_mean")
@@ -44,503 +120,178 @@ def bmode_snr(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
         
     window.results.snr = snr
 
-#adding new function
+
+# ------------------------------------------------------------------
+# First-Order Radiomics features  (scan / phantom normalised)
+# ------------------------------------------------------------------
+# Each function:
+#   1. Uses PyRadiomics firstorder features on both scan and phantom windows.
+#   2. Stores scan_feature / phantom_feature in window.results.
+#   3. Falls back to raw scan value if phantom window is unavailable.
+# ------------------------------------------------------------------
+
+@supported_spatial_dims(2, 3)
 @output_vars("bmode_radiomics_mean")
-@supported_spatial_dims(2, 3)
 def bmode_radiomics_mean(
-    scan_rf_window,
-    phantom_rf_window,
-    window,
-    config,
-    image_data,
-    **kwargs
-):
-    from scipy.signal import hilbert
-    import numpy as np
-
-    # Envelope detection
-    envelope = np.abs(hilbert(scan_rf_window, axis=0))
-
-    # Log-compressed B-mode
-    log_env = 20.0 * np.log10(envelope + 1e-10)
-
-    # Clean numerical issues
-    log_env = np.nan_to_num(log_env, nan=0.0, posinf=0.0, neginf=0.0)
-
-    # First-order mean (radiomics equivalent)
-    window.results.bmode_radiomics_mean = float(np.mean(log_env))
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """PyRadiomics first-order Mean, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["Mean"])
+    key = "original_firstorder_Mean"
+    window.results.bmode_radiomics_mean = _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
 
 
-# ------------------------------------------------------------------
-# B-mode PyRadiomics First-Order Standard Deviation 
-# ------------------------------------------------------------------
+@supported_spatial_dims(2, 3)
 @output_vars("bmode_radiomics_std")
-@supported_spatial_dims(2, 3)
 def bmode_radiomics_std(
-    scan_rf_window,
-    phantom_rf_window,
-    window,
-    config,
-    image_data,
-    **kwargs
-):
-    from scipy.signal import hilbert
-    import numpy as np
-
-    # Envelope detection
-    envelope = np.abs(hilbert(scan_rf_window, axis=0))
-
-    # Log-compressed B-mode
-    log_env = 20.0 * np.log10(envelope + 1e-10)
-
-    # Clean numerical issues
-    log_env = np.nan_to_num(log_env, nan=0.0, posinf=0.0, neginf=0.0)
-
-    # First-order standard deviation (radiomics equivalent)
-    window.results.bmode_radiomics_std = float(np.std(log_env))
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """PyRadiomics first-order StandardDeviation, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["StandardDeviation"])
+    key = "original_firstorder_StandardDeviation"
+    window.results.bmode_radiomics_std = _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
 
 
-# ------------------------------------------------------------------
-# B-mode Radiomics First-Order Median
-# ------------------------------------------------------------------
+@supported_spatial_dims(2, 3)
 @output_vars("bmode_radiomics_median")
-@supported_spatial_dims(2, 3)
 def bmode_radiomics_median(
-    scan_rf_window,
-    phantom_rf_window,
-    window,
-    config,
-    image_data,
-    **kwargs
-):
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """PyRadiomics first-order Median, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["Median"])
+    key = "original_firstorder_Median"
+    window.results.bmode_radiomics_median = _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
 
-    from scipy.signal import hilbert
-    import numpy as np
 
-    # Envelope detection
-    envelope = np.abs(hilbert(scan_rf_window, axis=0))
-
-    # Log-compressed B-mode
-    log_env = 20.0 * np.log10(envelope + 1e-10)
-
-    # Clean numerical issues
-    log_env = np.nan_to_num(log_env, nan=0.0, posinf=0.0, neginf=0.0)
-
-    # Median intensity
-    window.results.bmode_radiomics_median = float(np.median(log_env))
-
-# ------------------------------------------------------------------
-# B-mode Radiomics First-Order Entropy
-# ------------------------------------------------------------------
-
+@supported_spatial_dims(2, 3)
 @output_vars("bmode_radiomics_entropy")
-@supported_spatial_dims(2, 3)
 def bmode_radiomics_entropy(
-    scan_rf_window,
-    phantom_rf_window,
-    window,
-    config,
-    image_data,
-    **kwargs
-):
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """PyRadiomics first-order Entropy, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["Entropy"])
+    key = "original_firstorder_Entropy"
+    window.results.bmode_radiomics_entropy = _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
 
-    from scipy.signal import hilbert
-    import numpy as np
-    # Envelope detection
-    envelope = np.abs(hilbert(scan_rf_window, axis=0))
 
-    # Log-compressed B-mode
-    log_env = 20.0 * np.log10(envelope + 1e-10)
-
-    # Clean numerical issues
-    log_env = np.nan_to_num(log_env, nan=0.0, posinf=0.0, neginf=0.0)
-
-    # Histogram for entropy
-    hist, _ = np.histogram(log_env.flatten(), bins=64, density=True)
-
-    # Remove zeros
-    hist = hist[hist > 0]
-
-    entropy = -np.sum(hist * np.log2(hist))
-
-    window.results.bmode_radiomics_entropy = float(entropy)
-
-# ------------------------------------------------------------------
-# B-mode Radiomics First-Order energy
-# ------------------------------------------------------------------
-
+@supported_spatial_dims(2, 3)
 @output_vars("bmode_radiomics_energy")
-@supported_spatial_dims(2, 3)
 def bmode_radiomics_energy(
-    scan_rf_window,
-    phantom_rf_window,
-    window,
-    config,
-    image_data,
-    **kwargs
-):
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """PyRadiomics first-order Energy, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["Energy"])
+    key = "original_firstorder_Energy"
+    window.results.bmode_radiomics_energy = _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
 
-    from scipy.signal import hilbert
-    import numpy as np
-    envelope = np.abs(hilbert(scan_rf_window, axis=0))
 
-    log_env = 20.0 * np.log10(envelope + 1e-10)
-    log_env = np.nan_to_num(log_env, nan=0.0, posinf=0.0, neginf=0.0)
-
-    energy = np.sum(log_env**2)
-
-    window.results.bmode_radiomics_energy = float(energy)
-
-# ------------------------------------------------------------------
-# B-mode Radiomics First-Order Interquartile range
-# ------------------------------------------------------------------
+@supported_spatial_dims(2, 3)
 @output_vars("bmode_radiomics_iqr")
-@supported_spatial_dims(2, 3)
 def bmode_radiomics_iqr(
-    scan_rf_window,
-    phantom_rf_window,
-    window,
-    config,
-    image_data,
-    **kwargs
-):
-
-    from scipy.signal import hilbert
-    import numpy as np
-
-    envelope = np.abs(hilbert(scan_rf_window, axis=0))
-
-    log_env = 20.0 * np.log10(envelope + 1e-10)
-
-    log_env = np.nan_to_num(log_env, nan=0.0, posinf=0.0, neginf=0.0)
-
-    q75 = np.percentile(log_env, 75)
-    q25 = np.percentile(log_env, 25)
-
-    iqr = q75 - q25
-
-    window.results.bmode_radiomics_iqr = float(iqr)
-
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """PyRadiomics first-order InterquartileRange, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["InterquartileRange"])
+    key = "original_firstorder_InterquartileRange"
+    window.results.bmode_radiomics_iqr = _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
 
 
 # ------------------------------------------------------------------
-# B-mode Radiomics 2nd-Order GLCM Contrast (PyRadiomics)
+# GLCM (second-order) features  (scan / phantom normalised)
 # ------------------------------------------------------------------
+# The whole-window all-ones mask means PyRadiomics operates on the
+# entire windowed signal.  Real masking is handled upstream by QuantUS.
+# ------------------------------------------------------------------
+
+@supported_spatial_dims(2, 3)
 @output_vars("bmode_glcm_contrast")
-@supported_spatial_dims(2, 3)
 def bmode_glcm_contrast(
-    scan_rf_window,
-    phantom_rf_window,
-    window,
-    config,
-    image_data,
-    **kwargs
-):
-    """
-    Compute GLCM Contrast feature from log-compressed B-mode envelope
-    using PyRadiomics.
-
-    Operates on QuantUS windowed RF signals.
-    """
-    import numpy as np
-    import SimpleITK as sitk
-    from scipy.signal import hilbert
-    from radiomics import featureextractor
-
-
-    # Step 1 — Envelope detection from RF
-    envelope = np.abs(
-        hilbert(scan_rf_window, axis=0)
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """PyRadiomics GLCM Contrast, normalised by phantom."""
+    ext = _make_extractor("glcm", ["Contrast"])
+    key = "original_glcm_Contrast"
+    window.results.bmode_glcm_contrast = _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
     )
 
 
-    # Step 2 — Log compression → B-mode
-    log_env = 20*np.log10(
-        envelope + 1e-10
-    )
-
-
-    # Step 3 — Clean numerical values
-    log_env = np.nan_to_num(
-        log_env,
-        nan=0.0,
-        posinf=0.0,
-        neginf=0.0
-    )
-
-
-    # Step 4 — Convert to PyRadiomics image
-    image = sitk.GetImageFromArray(
-        log_env.astype(np.float32)
-    )
-
-
-    # Step 5 — Create segmentation mask
-    mask_array = np.ones_like(
-        log_env,
-        dtype=np.uint8
-    )
-
-
-    # Stabilizes PyRadiomics segmentation detection
-    mask_array[0,0] = 2
-
-
-    mask = sitk.GetImageFromArray(mask_array)
-
-
-    # Geometry must match
-    mask.CopyInformation(image)
-
-
-    # Step 6 — PyRadiomics extractor
-    extractor = featureextractor.RadiomicsFeatureExtractor()
-
-
-    extractor.disableAllFeatures()
-
-
-    extractor.enableFeaturesByName(
-        glcm=["Contrast"]
-    )
-
-
-    # Compute only label=1 region
-    extractor.settings["label"] = 1
-
-
-    # Step 7 — Compute features
-    features = extractor.execute(
-        image,
-        mask
-    )
-
-
-    # Step 8 — Store in QuantUS
-    window.results.bmode_glcm_contrast = float(
-        features["original_glcm_Contrast"]
-    )
-
-
-# ------------------------------------------------------------------
-# B-mode Radiomics 2nd-Order GLCM Homogeneity (PyRadiomics)
-# ------------------------------------------------------------------
+@supported_spatial_dims(2, 3)
 @output_vars("bmode_glcm_homogeneity")
-@supported_spatial_dims(2, 3)
 def bmode_glcm_homogeneity(
-    scan_rf_window,
-    phantom_rf_window,
-    window,
-    config,
-    image_data,
-    **kwargs
-):
-
-    import numpy as np
-    import SimpleITK as sitk
-    from scipy.signal import hilbert
-    from radiomics import featureextractor
-
-    envelope = np.abs(hilbert(scan_rf_window, axis=0))
-
-    log_env = 20*np.log10(envelope + 1e-10)
-
-    log_env = np.nan_to_num(log_env)
-
-    image = sitk.GetImageFromArray(
-        log_env.astype(np.float32)
-    )
-
-    mask_array = np.ones_like(
-        log_env,
-        dtype=np.uint8
-    )
-
-    mask_array[0,0] = 2
-
-    mask = sitk.GetImageFromArray(mask_array)
-
-    mask.CopyInformation(image)
-
-    extractor = featureextractor.RadiomicsFeatureExtractor()
-
-    extractor.disableAllFeatures()
-
-    extractor.enableFeaturesByName(
-        glcm=["Idm"]
-    )
-
-    extractor.settings["label"] = 1
-
-    features = extractor.execute(
-        image,
-        mask
-    )
-
-    window.results.bmode_glcm_homogeneity = float(
-        features["original_glcm_Idm"]
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """PyRadiomics GLCM Idm (Homogeneity), normalised by phantom."""
+    ext = _make_extractor("glcm", ["Idm"])
+    key = "original_glcm_Idm"
+    window.results.bmode_glcm_homogeneity = _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
     )
 
 
-# ------------------------------------------------------------------
-# B-mode Radiomics 2nd-Order GLCM Correlation (PyRadiomics)
-# ------------------------------------------------------------------
+@supported_spatial_dims(2, 3)
 @output_vars("bmode_glcm_correlation")
-@supported_spatial_dims(2, 3)
 def bmode_glcm_correlation(
-    scan_rf_window,
-    phantom_rf_window,
-    window,
-    config,
-    image_data,
-    **kwargs
-):
-
-    import numpy as np
-    import SimpleITK as sitk
-    from scipy.signal import hilbert
-    from radiomics import featureextractor
-
-
-    # Step 1 — Envelope detection
-    envelope = np.abs(
-        hilbert(scan_rf_window, axis=0)
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """PyRadiomics GLCM Correlation, normalised by phantom."""
+    ext = _make_extractor("glcm", ["Correlation"])
+    key = "original_glcm_Correlation"
+    window.results.bmode_glcm_correlation = _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
     )
 
 
-    # Step 2 — Log compression → B-mode
-    log_env = 20*np.log10(
-        envelope + 1e-10
-    )
-
-
-    # Step 3 — Clean numerical values
-    log_env = np.nan_to_num(
-        log_env,
-        nan=0.0,
-        posinf=0.0,
-        neginf=0.0
-    )
-
-
-    # Step 4 — Convert to image
-    image = sitk.GetImageFromArray(
-        log_env.astype(np.float32)
-    )
-
-
-    # Step 5 — Mask
-    mask_array = np.ones_like(
-        log_env,
-        dtype=np.uint8
-    )
-
-    # Same stabilization trick
-    mask_array[0,0] = 2
-
-    mask = sitk.GetImageFromArray(mask_array)
-
-    mask.CopyInformation(image)
-
-
-    # Step 6 — Radiomics extractor
-    extractor = featureextractor.RadiomicsFeatureExtractor()
-
-    extractor.disableAllFeatures()
-
-    extractor.enableFeaturesByName(
-        glcm=["Correlation"]
-    )
-
-    extractor.settings["label"] = 1
-
-
-    # Step 7 — Compute
-    features = extractor.execute(
-        image,
-        mask
-    )
-
-
-    # Step 8 — Store result
-    window.results.bmode_glcm_correlation = float(
-        features["original_glcm_Correlation"]
-    )
-
-# ------------------------------------------------------------------
-# B-mode Radiomics 2nd-Order GLCM Energy (PyRadiomics)
-# ------------------------------------------------------------------
-@output_vars("bmode_glcm_energy")
 @supported_spatial_dims(2, 3)
+@output_vars("bmode_glcm_energy")
 def bmode_glcm_energy(
-    scan_rf_window,
-    phantom_rf_window,
-    window,
-    config,
-    image_data,
-    **kwargs
-):
-
-    import numpy as np
-    import SimpleITK as sitk
-    from scipy.signal import hilbert
-    from radiomics import featureextractor
-
-
-    # Envelope detection
-    envelope = np.abs(
-        hilbert(scan_rf_window, axis=0)
-    )
-
-
-    # Log-compressed B-mode
-    log_env = 20*np.log10(
-        envelope + 1e-10
-    )
-
-
-    log_env = np.nan_to_num(
-        log_env,
-        nan=0.0,
-        posinf=0.0,
-        neginf=0.0
-    )
-
-
-    image = sitk.GetImageFromArray(
-        log_env.astype(np.float32)
-    )
-
-
-    mask_array = np.ones_like(
-        log_env,
-        dtype=np.uint8
-    )
-
-    mask_array[0,0] = 2
-
-    mask = sitk.GetImageFromArray(mask_array)
-
-    mask.CopyInformation(image)
-
-
-    extractor = featureextractor.RadiomicsFeatureExtractor()
-
-    extractor.disableAllFeatures()
-
-    extractor.enableFeaturesByName(
-        glcm=["JointEnergy"]
-    )
-
-    extractor.settings["label"] = 1
-
-
-    features = extractor.execute(
-        image,
-        mask
-    )
-
-
-    window.results.bmode_glcm_energy = float(
-        features["original_glcm_JointEnergy"]
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """PyRadiomics GLCM JointEnergy, normalised by phantom."""
+    ext = _make_extractor("glcm", ["JointEnergy"])
+    key = "original_glcm_JointEnergy"
+    window.results.bmode_glcm_energy = _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
     )

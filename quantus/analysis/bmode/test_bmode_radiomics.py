@@ -34,8 +34,11 @@ def test_bmode_radiomics_features():
 
     np.random.seed(0)
 
-    # dummy RF patch
-    scan_rf_window = np.random.randn(128,32).astype(np.float32)
+    # dummy RF patches
+    scan_rf_window = np.random.randn(128, 32).astype(np.float32)
+
+    phantom_rf_window = np.random.randn(128, 32).astype(np.float32)
+
 
     window = DummyWindow()
     config = DummyConfig()
@@ -46,7 +49,7 @@ def test_bmode_radiomics_features():
 
     bmode_radiomics_mean(
         scan_rf_window,
-        None,
+        phantom_rf_window,
         window,
         config,
         image_data
@@ -54,7 +57,7 @@ def test_bmode_radiomics_features():
 
     bmode_radiomics_std(
         scan_rf_window,
-        None,
+        phantom_rf_window,
         window,
         config,
         image_data
@@ -62,7 +65,7 @@ def test_bmode_radiomics_features():
 
     bmode_radiomics_median(
         scan_rf_window,
-        None,
+        phantom_rf_window,
         window,
         config,
         image_data
@@ -70,7 +73,7 @@ def test_bmode_radiomics_features():
 
     bmode_radiomics_entropy(
         scan_rf_window,
-        None,
+        phantom_rf_window,
         window,
         config,
         image_data
@@ -78,7 +81,7 @@ def test_bmode_radiomics_features():
 
     bmode_radiomics_energy(
         scan_rf_window,
-        None,
+        phantom_rf_window,
         window,
         config,
         image_data
@@ -89,7 +92,7 @@ def test_bmode_radiomics_features():
 
     bmode_glcm_contrast(
         scan_rf_window,
-        None,
+        phantom_rf_window,
         window,
         config,
         image_data
@@ -97,7 +100,7 @@ def test_bmode_radiomics_features():
 
     bmode_glcm_homogeneity(
         scan_rf_window,
-        None,
+        phantom_rf_window,
         window,
         config,
         image_data
@@ -105,7 +108,7 @@ def test_bmode_radiomics_features():
 
     bmode_glcm_correlation(
         scan_rf_window,
-        None,
+        phantom_rf_window,
         window,
         config,
         image_data
@@ -113,7 +116,7 @@ def test_bmode_radiomics_features():
 
     bmode_glcm_energy(
         scan_rf_window,
-        None,
+        phantom_rf_window,
         window,
         config,
         image_data
