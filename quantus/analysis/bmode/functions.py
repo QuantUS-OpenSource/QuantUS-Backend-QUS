@@ -8,6 +8,26 @@ from ...data_objs.analysis_config import RfAnalysisConfig
 from ...data_objs.analysis import Window
 from ...data_objs.image import UltrasoundRfImage
 
+# =============================================================================
+# Radiomics feature mapping (PyRadiomics → our feature names)
+# =============================================================================
+RADIOMICS_MAP = {
+    "firstorder": {
+        "Mean": "Mean",
+        "StandardDeviation": "Variance",        # we take sqrt later to get std
+        "Median": "Median",
+        "Entropy": "Entropy",
+        "Energy": "Energy",
+        "InterquartileRange": "InterquartileRange",
+    },
+    "glcm": {
+        "Contrast": "Contrast",
+        "Homogeneity": "InverseDifferenceMoment",   # standard GLCM homogeneity
+        "Correlation": "Correlation",
+        "JointEnergy": "JointEnergy",
+    },
+}
+
 
 # ------------------------------------------------------------------
 # Shared helpers
@@ -153,13 +173,17 @@ def bmode_radiomics_std(
     window: Window, config: RfAnalysisConfig,
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
-    """PyRadiomics first-order StandardDeviation, normalised by phantom."""
-    ext = _make_extractor("firstorder", ["StandardDeviation"])
-    key = "original_firstorder_StandardDeviation"
-    window.results.bmode_radiomics_std = _safe_ratio(
-        _extract_feature(ext, scan_rf_window, key),
-        _extract_feature(ext, phantom_rf_window, key),
-    )
+    """PyRadiomics first-order Variance → std (normalised by phantom)."""
+    ext = _make_extractor("firstorder", ["Variance"])          # ← changed here
+    key = "original_firstorder_Variance"                       # ← changed here
+    variance = _extract_feature(ext, scan_rf_window, key)
+    phantom_variance = _extract_feature(ext, phantom_rf_window, key)
+    
+    # Convert variance → standard deviation
+    std_scan = np.sqrt(variance) if variance is not None else None
+    std_phantom = np.sqrt(phantom_variance) if phantom_variance is not None else None
+    
+    window.results.bmode_radiomics_std = _safe_ratio(std_scan, std_phantom)
 
 
 @supported_spatial_dims(2, 3)
