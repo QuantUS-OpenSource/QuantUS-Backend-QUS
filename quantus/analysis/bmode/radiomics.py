@@ -1,20 +1,18 @@
 """
 B-Mode Radiomics Analysis Functions
 
-This module contains all radiomics-based feature extraction functions for B-Mode analysis.
+This module contains radiomics calculation functions for B-Mode analysis.
 It leverages PyRadiomics to compute first-order and second-order (GLCM) texture features
 from B-mode images derived from RF data.
+
+All calculation functions return numeric values only. The PyQt/analysis framework
+integration (setting window.results) is handled by wrapper functions in functions.py.
 """
 
 import numpy as np
 import SimpleITK as sitk
 from scipy.signal import hilbert
 from radiomics import featureextractor
-
-from ..paramap.decorators import supported_spatial_dims, output_vars, dependencies
-from ...data_objs.analysis_config import RfAnalysisConfig
-from ...data_objs.analysis import Window
-from ...data_objs.image import UltrasoundRfImage
 
 
 # =============================================================================
@@ -217,180 +215,9 @@ def calc_glcm_energy(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) 
 
 
 # ------------------------------------------------------------------
-# First-Order Radiomics features  (scan / phantom normalised)
+# Architecture Note:
 # ------------------------------------------------------------------
-# Each function:
-#   1. Uses PyRadiomics firstorder features on both scan and phantom windows.
-#   2. Stores scan_feature / phantom_feature in window.results.
-#   3. Falls back to raw scan value if phantom window is unavailable.
-# ------------------------------------------------------------------
-
-@supported_spatial_dims(2, 3)
-@output_vars("bmode_radiomics_mean")
-def bmode_radiomics_mean(
-    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
-    window: Window, config: RfAnalysisConfig,
-    image_data: UltrasoundRfImage, **kwargs
-) -> None:
-    """PyRadiomics first-order Mean, normalised by phantom."""
-    ext = _make_extractor("firstorder", ["Mean"])
-    key = "original_firstorder_Mean"
-    window.results.bmode_radiomics_mean = _safe_ratio(
-        _extract_feature(ext, scan_rf_window, key),
-        _extract_feature(ext, phantom_rf_window, key),
-    )
-
-
-@supported_spatial_dims(2, 3)
-@output_vars("bmode_radiomics_std")
-def bmode_radiomics_std(
-    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
-    window: Window, config: RfAnalysisConfig,
-    image_data: UltrasoundRfImage, **kwargs
-) -> None:
-    """PyRadiomics first-order Variance → std (normalised by phantom)."""
-    ext = _make_extractor("firstorder", ["Variance"])          # ← changed here
-    key = "original_firstorder_Variance"                       # ← changed here
-    variance = _extract_feature(ext, scan_rf_window, key)
-    phantom_variance = _extract_feature(ext, phantom_rf_window, key)
-    
-    # Convert variance → standard deviation
-    std_scan = np.sqrt(variance) if variance is not None else None
-    std_phantom = np.sqrt(phantom_variance) if phantom_variance is not None else None
-    
-    window.results.bmode_radiomics_std = _safe_ratio(std_scan, std_phantom)
-
-
-@supported_spatial_dims(2, 3)
-@output_vars("bmode_radiomics_median")
-def bmode_radiomics_median(
-    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
-    window: Window, config: RfAnalysisConfig,
-    image_data: UltrasoundRfImage, **kwargs
-) -> None:
-    """PyRadiomics first-order Median, normalised by phantom."""
-    ext = _make_extractor("firstorder", ["Median"])
-    key = "original_firstorder_Median"
-    window.results.bmode_radiomics_median = _safe_ratio(
-        _extract_feature(ext, scan_rf_window, key),
-        _extract_feature(ext, phantom_rf_window, key),
-    )
-
-
-@supported_spatial_dims(2, 3)
-@output_vars("bmode_radiomics_entropy")
-def bmode_radiomics_entropy(
-    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
-    window: Window, config: RfAnalysisConfig,
-    image_data: UltrasoundRfImage, **kwargs
-) -> None:
-    """PyRadiomics first-order Entropy, normalised by phantom."""
-    ext = _make_extractor("firstorder", ["Entropy"])
-    key = "original_firstorder_Entropy"
-    window.results.bmode_radiomics_entropy = _safe_ratio(
-        _extract_feature(ext, scan_rf_window, key),
-        _extract_feature(ext, phantom_rf_window, key),
-    )
-
-
-@supported_spatial_dims(2, 3)
-@output_vars("bmode_radiomics_energy")
-def bmode_radiomics_energy(
-    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
-    window: Window, config: RfAnalysisConfig,
-    image_data: UltrasoundRfImage, **kwargs
-) -> None:
-    """PyRadiomics first-order Energy, normalised by phantom."""
-    ext = _make_extractor("firstorder", ["Energy"])
-    key = "original_firstorder_Energy"
-    window.results.bmode_radiomics_energy = _safe_ratio(
-        _extract_feature(ext, scan_rf_window, key),
-        _extract_feature(ext, phantom_rf_window, key),
-    )
-
-
-@supported_spatial_dims(2, 3)
-@output_vars("bmode_radiomics_iqr")
-def bmode_radiomics_iqr(
-    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
-    window: Window, config: RfAnalysisConfig,
-    image_data: UltrasoundRfImage, **kwargs
-) -> None:
-    """PyRadiomics first-order InterquartileRange, normalised by phantom."""
-    ext = _make_extractor("firstorder", ["InterquartileRange"])
-    key = "original_firstorder_InterquartileRange"
-    window.results.bmode_radiomics_iqr = _safe_ratio(
-        _extract_feature(ext, scan_rf_window, key),
-        _extract_feature(ext, phantom_rf_window, key),
-    )
-
-
-# ------------------------------------------------------------------
-# GLCM (second-order) features  (scan / phantom normalised)
-# ------------------------------------------------------------------
-# The whole-window all-ones mask means PyRadiomics operates on the
-# entire windowed signal.  Real masking is handled upstream by QuantUS.
-# ------------------------------------------------------------------
-
-@supported_spatial_dims(2, 3)
-@output_vars("bmode_glcm_contrast")
-def bmode_glcm_contrast(
-    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
-    window: Window, config: RfAnalysisConfig,
-    image_data: UltrasoundRfImage, **kwargs
-) -> None:
-    """PyRadiomics GLCM Contrast, normalised by phantom."""
-    ext = _make_extractor("glcm", ["Contrast"])
-    key = "original_glcm_Contrast"
-    window.results.bmode_glcm_contrast = _safe_ratio(
-        _extract_feature(ext, scan_rf_window, key),
-        _extract_feature(ext, phantom_rf_window, key),
-    )
-
-
-@supported_spatial_dims(2, 3)
-@output_vars("bmode_glcm_homogeneity")
-def bmode_glcm_homogeneity(
-    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
-    window: Window, config: RfAnalysisConfig,
-    image_data: UltrasoundRfImage, **kwargs
-) -> None:
-    """PyRadiomics GLCM Idm (Homogeneity), normalised by phantom."""
-    ext = _make_extractor("glcm", ["Idm"])
-    key = "original_glcm_Idm"
-    window.results.bmode_glcm_homogeneity = _safe_ratio(
-        _extract_feature(ext, scan_rf_window, key),
-        _extract_feature(ext, phantom_rf_window, key),
-    )
-
-
-@supported_spatial_dims(2, 3)
-@output_vars("bmode_glcm_correlation")
-def bmode_glcm_correlation(
-    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
-    window: Window, config: RfAnalysisConfig,
-    image_data: UltrasoundRfImage, **kwargs
-) -> None:
-    """PyRadiomics GLCM Correlation, normalised by phantom."""
-    ext = _make_extractor("glcm", ["Correlation"])
-    key = "original_glcm_Correlation"
-    window.results.bmode_glcm_correlation = _safe_ratio(
-        _extract_feature(ext, scan_rf_window, key),
-        _extract_feature(ext, phantom_rf_window, key),
-    )
-
-
-@supported_spatial_dims(2, 3)
-@output_vars("bmode_glcm_energy")
-def bmode_glcm_energy(
-    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
-    window: Window, config: RfAnalysisConfig,
-    image_data: UltrasoundRfImage, **kwargs
-) -> None:
-    """PyRadiomics GLCM JointEnergy, normalised by phantom."""
-    ext = _make_extractor("glcm", ["JointEnergy"])
-    key = "original_glcm_JointEnergy"
-    window.results.bmode_glcm_energy = _safe_ratio(
-        _extract_feature(ext, scan_rf_window, key),
-        _extract_feature(ext, phantom_rf_window, key),
-    )
+# The decorated functions (with @supported_spatial_dims and @output_vars)
+# are now implemented as wrapper functions in functions.py.
+# These wrappers call the calc_* functions above and set window.results.
+# This radiomics.py module provides pure calculation logic only.
