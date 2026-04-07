@@ -25,7 +25,11 @@ class DummyConfig:
 
 
 class DummyImage:
-    pass
+    def __init__(self, dims=2):
+        self.axial_res = 0.05
+        self.lateral_res = 0.1
+        self.coronal_res = 0.5
+        self.spatial_dims = dims
 
 
 def test_bmode_radiomics_features():
@@ -40,7 +44,7 @@ def test_bmode_radiomics_features():
 
     window = DummyWindow()
     config = DummyConfig()
-    image_data = DummyImage()
+    image_data = DummyImage(dims=2)
 
 
     # -------- First Order --------
