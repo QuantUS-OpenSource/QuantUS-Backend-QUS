@@ -89,6 +89,12 @@ if RADIOMICS_AVAILABLE:
         
         image.SetSpacing(spacing)
 
+        # PyRadiomics/SimpleITK indexing note:
+        # np.array shape (Z, Y, X) -> SITK image [X, Y, Z]
+        # For 2D: (Axial=Y, Lateral=X) -> Spacing (Lat_Res, Ax_Res)
+        # For 3D: (Coronal=Z, Lateral=Y, Axial=X) -> Spacing (Ax_Res, Lat_Res, Cor_Res)
+        # We ensure consistency with the input shape from framework.py
+        
         mask_array = np.ones_like(log_env, dtype=np.uint8)
         mask_array.flat[0] = 2  # sentinel: satisfies PyRadiomics label validation
         mask = sitk.GetImageFromArray(mask_array)
