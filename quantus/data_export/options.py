@@ -33,8 +33,9 @@ def get_data_export_types() -> Tuple[dict, dict]:
                 entry_class = getattr(module, f"{folder.name.upper()}Export", None)
                 if entry_class:
                     types[folder.name] = entry_class
-            except ModuleNotFoundError:
-                # Handle the case where the module cannot be found - skip silently
+            except ModuleNotFoundError as e:
+                # Handle the case where the module cannot be found
+                print(f"Module not found for {folder.name}: {e}")
                 pass
 
     functions = {}
