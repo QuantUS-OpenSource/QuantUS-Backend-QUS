@@ -7,7 +7,7 @@ from ...data_objs.analysis import Window
 from ...data_objs.image import UltrasoundRfImage
 
 # Import radiomics module for wrapper functions
-from . import radiomics
+from . import radiomics_utils as radiomics
 
 
 # ------------------------------------------------------------------

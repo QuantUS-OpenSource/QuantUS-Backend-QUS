@@ -1,17 +1,15 @@
 import numpy as np
 
-from engines.qus.quantus.analysis.bmode.functions import (
-
-    bmode_radiomics_mean,
-    bmode_radiomics_std,
-    bmode_radiomics_median,
-    bmode_radiomics_entropy,
-    bmode_radiomics_energy,
-
-    bmode_glcm_contrast,
-    bmode_glcm_homogeneity,
-    bmode_glcm_correlation,
-    bmode_glcm_energy,
+from quantus.analysis.bmode.functions import (
+    bmode_radiomics_mean_wrapper as bmode_radiomics_mean,
+    bmode_radiomics_std_wrapper as bmode_radiomics_std,
+    bmode_radiomics_median_wrapper as bmode_radiomics_median,
+    bmode_radiomics_entropy_wrapper as bmode_radiomics_entropy,
+    bmode_radiomics_energy_wrapper as bmode_radiomics_energy,
+    bmode_glcm_contrast_wrapper as bmode_glcm_contrast,
+    bmode_glcm_homogeneity_wrapper as bmode_glcm_homogeneity,
+    bmode_glcm_correlation_wrapper as bmode_glcm_correlation,
+    bmode_glcm_energy_wrapper as bmode_glcm_energy,
 )
 
 
