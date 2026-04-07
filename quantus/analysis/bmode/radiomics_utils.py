@@ -9,16 +9,21 @@ All calculation functions return numeric values only. The PyQt/analysis framewor
 integration (setting window.results) is handled by wrapper functions in functions.py.
 """
 
+import logging
 import numpy as np
 from scipy.signal import hilbert
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Try to import radiomics features, but make it optional
 try:
     import SimpleITK as sitk
     from radiomics import featureextractor
     RADIOMICS_AVAILABLE = True
+    logger.debug("Successfully imported PyRadiomics and SimpleITK.")
 except ImportError as e:
-    print(f"Warning: PyRadiomics not available. B-Mode radiomics features will not work: {e}")
+    logger.warning(f"PyRadiomics not available. B-Mode radiomics features will not work: {e}")
     RADIOMICS_AVAILABLE = False
 
 
@@ -71,13 +76,16 @@ if RADIOMICS_AVAILABLE:
         - 3D: (lateral_res, axial_res, coronal_res)
         Note: SimpleITK treats the first dimension as 'x' (column index).
         """
+        logger.debug(f"Building SITK image/mask. Input shape: {log_env.shape}")
         image = sitk.GetImageFromArray(log_env.astype(np.float32))
         
         # Set spatial spacing to ensure GLCM distances reflect physical distance (mm)
         if hasattr(image_data, 'spatial_dims') and image_data.spatial_dims == 3:
             spacing = (image_data.lateral_res, image_data.axial_res, image_data.coronal_res)
+            logger.debug(f"3D Spacing (Lat, Ax, Cor): {spacing}")
         else:
             spacing = (image_data.lateral_res, image_data.axial_res)
+            logger.debug(f"2D Spacing (Lat, Ax): {spacing}")
         
         image.SetSpacing(spacing)
 
@@ -97,6 +105,7 @@ if RADIOMICS_AVAILABLE:
         We use a fixed binWidth (default 1.0 dB) for log-compressed ultrasound 
         data to ensure textures are captured with sufficient resolution (~60-100 bins).
         """
+        logger.debug(f"Creating extractor for {feature_class} with features {feature_names} (binWidth: {bin_width})")
         extractor = featureextractor.RadiomicsFeatureExtractor()
         extractor.disableAllFeatures()
         extractor.enableFeaturesByName(**{feature_class: feature_names})
@@ -116,11 +125,19 @@ if RADIOMICS_AVAILABLE:
         Returns None if rf_window is None (e.g. phantom not provided by QuantUS).
         """
         if rf_window is None:
+            logger.debug("RF window is None, skipping extraction.")
             return None
+        
         log_env = _get_log_envelope(rf_window)
         image, mask = _build_radiomics_image_and_mask(log_env, image_data)
-        return float(extractor.execute(image, mask)[key])
-        return float(extractor.execute(image, mask)[key])
+        
+        try:
+            result = extractor.execute(image, mask)[key]
+            logger.debug(f"Extracted feature {key}: {result}")
+            return float(result)
+        except Exception as e:
+            logger.error(f"Failed to extract radiomics feature {key}: {e}")
+            return None
 
 
     def _safe_ratio(scan_val: float, phantom_val, eps: float = 1e-10) -> float:
@@ -129,9 +146,16 @@ if RADIOMICS_AVAILABLE:
         denominators.  If phantom_val is None (phantom window unavailable),
         returns the raw scan value instead of a normalised ratio.
         """
+        if scan_val is None:
+            return None
+            
         if phantom_val is None:
+            logger.debug(f"Scan value: {scan_val}. No phantom available.")
             return float(scan_val)
-        return float(scan_val / (phantom_val + eps))
+        
+        ratio = float(scan_val / (phantom_val + eps))
+        logger.debug(f"Scan: {scan_val}, Phantom: {phantom_val}, Normalized Ratio: {ratio}")
+        return ratio
 
 else:
     # Stub implementations when radiomics is not available

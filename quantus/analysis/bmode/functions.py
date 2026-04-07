@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 from scipy.signal import hilbert
 
@@ -5,6 +6,9 @@ from ..paramap.decorators import supported_spatial_dims, output_vars, dependenci
 from ...data_objs.analysis_config import RfAnalysisConfig
 from ...data_objs.analysis import Window
 from ...data_objs.image import UltrasoundRfImage
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Import radiomics module for wrapper functions
 from . import radiomics_utils as radiomics
@@ -20,18 +24,24 @@ def bmode_intensity(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
                     window: Window, config: RfAnalysisConfig, 
                     image_data: UltrasoundRfImage, **kwargs) -> None:
     """Compute B-Mode intensity (mean of log-compressed envelope), normalised by phantom."""
+    logger.debug(f"Calculating B-Mode Intensity. Scan window shape: {scan_rf_window.shape}")
+    
     # Calculate for scan
     scan_envelope = np.abs(hilbert(scan_rf_window, axis=0))
     scan_log_env = 20.0 * np.log10(scan_envelope + 1e-10)
     scan_intensity = np.mean(scan_log_env)
     
     # Calculate for phantom
-    phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
-    phantom_log_env = 20.0 * np.log10(phantom_envelope + 1e-10)
-    phantom_intensity = np.mean(phantom_log_env)
+    phantom_intensity = 0.0
+    if phantom_rf_window is not None:
+        phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
+        phantom_log_env = 20.0 * np.log10(phantom_envelope + 1e-10)
+        phantom_intensity = np.mean(phantom_log_env)
     
     # Apply phantom normalization
-    window.results.bmode_mean = scan_intensity / (phantom_intensity + 1e-10)
+    result = scan_intensity / (phantom_intensity + 1e-10)
+    window.results.bmode_mean = result
+    logger.debug(f"B-Mode Intensity result: {result}")
 
 @supported_spatial_dims(2, 3)
 @output_vars("snr")
@@ -39,6 +49,8 @@ def bmode_snr(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
                     window: Window, config: RfAnalysisConfig, 
                     image_data: UltrasoundRfImage, **kwargs) -> None:
     """Compute Signal-to-Noise Ratio (SNR) of the envelope, normalised by phantom."""
+    logger.debug(f"Calculating B-Mode SNR. Scan window shape: {scan_rf_window.shape}")
+
     # Calculate SNR for scan
     scan_envelope = np.abs(hilbert(scan_rf_window, axis=0))
     scan_mean = np.mean(scan_envelope)
@@ -46,13 +58,17 @@ def bmode_snr(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
     scan_snr = scan_mean / (scan_std + 1e-10)
     
     # Calculate SNR for phantom
-    phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
-    phantom_mean = np.mean(phantom_envelope)
-    phantom_std = np.std(phantom_envelope)
-    phantom_snr = phantom_mean / (phantom_std + 1e-10)
+    phantom_snr = 1.0 # default to neutral
+    if phantom_rf_window is not None:
+        phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
+        phantom_mean = np.mean(phantom_envelope)
+        phantom_std = np.std(phantom_envelope)
+        phantom_snr = phantom_mean / (phantom_std + 1e-10)
     
     # Apply phantom normalization
-    window.results.snr = scan_snr / (phantom_snr + 1e-10)
+    result = scan_snr / (phantom_snr + 1e-10)
+    window.results.snr = result
+    logger.debug(f"B-Mode SNR result: {result}")
 
 
 # ------------------------------------------------------------------
@@ -69,8 +85,10 @@ def bmode_radiomics_mean_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order Mean feature."""
+    logger.debug("Calculating Radiomics Mean")
     value = radiomics.calc_radiomics_mean(scan_rf_window, phantom_rf_window, image_data)
     window.results.bmode_radiomics_mean = value
+    logger.debug(f"Radiomics Mean result: {value}")
 
 
 @supported_spatial_dims(2, 3)
@@ -81,8 +99,10 @@ def bmode_radiomics_std_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order Standard Deviation feature."""
+    logger.debug("Calculating Radiomics Std")
     value = radiomics.calc_radiomics_std(scan_rf_window, phantom_rf_window, image_data)
     window.results.bmode_radiomics_std = value
+    logger.debug(f"Radiomics Std result: {value}")
 
 
 @supported_spatial_dims(2, 3)
@@ -93,8 +113,10 @@ def bmode_radiomics_median_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order Median feature."""
+    logger.debug("Calculating Radiomics Median")
     value = radiomics.calc_radiomics_median(scan_rf_window, phantom_rf_window, image_data)
     window.results.bmode_radiomics_median = value
+    logger.debug(f"Radiomics Median result: {value}")
 
 
 @supported_spatial_dims(2, 3)
@@ -105,8 +127,10 @@ def bmode_radiomics_entropy_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order Entropy feature."""
+    logger.debug("Calculating Radiomics Entropy")
     value = radiomics.calc_radiomics_entropy(scan_rf_window, phantom_rf_window, image_data)
     window.results.bmode_radiomics_entropy = value
+    logger.debug(f"Radiomics Entropy result: {value}")
 
 
 @supported_spatial_dims(2, 3)
@@ -117,8 +141,10 @@ def bmode_radiomics_energy_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order Energy feature."""
+    logger.debug("Calculating Radiomics Energy")
     value = radiomics.calc_radiomics_energy(scan_rf_window, phantom_rf_window, image_data)
     window.results.bmode_radiomics_energy = value
+    logger.debug(f"Radiomics Energy result: {value}")
 
 
 @supported_spatial_dims(2, 3)
@@ -129,8 +155,10 @@ def bmode_radiomics_iqr_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order InterquartileRange feature."""
+    logger.debug("Calculating Radiomics IQR")
     value = radiomics.calc_radiomics_iqr(scan_rf_window, phantom_rf_window, image_data)
     window.results.bmode_radiomics_iqr = value
+    logger.debug(f"Radiomics IQR result: {value}")
 
 
 @supported_spatial_dims(2, 3)
@@ -141,8 +169,10 @@ def bmode_glcm_contrast_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics GLCM Contrast feature."""
+    logger.debug("Calculating GLCM Contrast")
     value = radiomics.calc_glcm_contrast(scan_rf_window, phantom_rf_window, image_data)
     window.results.bmode_glcm_contrast = value
+    logger.debug(f"GLCM Contrast result: {value}")
 
 
 @supported_spatial_dims(2, 3)
@@ -153,8 +183,10 @@ def bmode_glcm_homogeneity_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics GLCM Homogeneity feature."""
+    logger.debug("Calculating GLCM Homogeneity")
     value = radiomics.calc_glcm_homogeneity(scan_rf_window, phantom_rf_window, image_data)
     window.results.bmode_glcm_homogeneity = value
+    logger.debug(f"GLCM Homogeneity result: {value}")
 
 
 @supported_spatial_dims(2, 3)
@@ -165,8 +197,10 @@ def bmode_glcm_correlation_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics GLCM Correlation feature."""
+    logger.debug("Calculating GLCM Correlation")
     value = radiomics.calc_glcm_correlation(scan_rf_window, phantom_rf_window, image_data)
     window.results.bmode_glcm_correlation = value
+    logger.debug(f"GLCM Correlation result: {value}")
 
 
 @supported_spatial_dims(2, 3)
@@ -177,5 +211,7 @@ def bmode_glcm_energy_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics GLCM Energy feature."""
+    logger.debug("Calculating GLCM Energy")
     value = radiomics.calc_glcm_energy(scan_rf_window, phantom_rf_window, image_data)
     window.results.bmode_glcm_energy = value
+    logger.debug(f"GLCM Energy result: {value}")
