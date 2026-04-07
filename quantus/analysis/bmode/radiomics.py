@@ -107,6 +107,116 @@ def _safe_ratio(scan_val: float, phantom_val, eps: float = 1e-10) -> float:
 
 
 # ------------------------------------------------------------------
+# Calculation functions - return values instead of setting window.results
+# ------------------------------------------------------------------
+# Used by wrapper functions in functions.py to get computed values
+# ------------------------------------------------------------------
+
+def _calc_radiomics_mean(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) -> float:
+    """Calculate PyRadiomics first-order Mean, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["Mean"])
+    key = "original_firstorder_Mean"
+    return _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
+
+
+def _calc_radiomics_std(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) -> float:
+    """Calculate PyRadiomics first-order Standard Deviation, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["Variance"])
+    key = "original_firstorder_Variance"
+    variance = _extract_feature(ext, scan_rf_window, key)
+    phantom_variance = _extract_feature(ext, phantom_rf_window, key)
+    
+    # Convert variance → standard deviation
+    std_scan = np.sqrt(variance) if variance is not None else None
+    std_phantom = np.sqrt(phantom_variance) if phantom_variance is not None else None
+    
+    return _safe_ratio(std_scan, std_phantom)
+
+
+def _calc_radiomics_median(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) -> float:
+    """Calculate PyRadiomics first-order Median, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["Median"])
+    key = "original_firstorder_Median"
+    return _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
+
+
+def _calc_radiomics_entropy(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) -> float:
+    """Calculate PyRadiomics first-order Entropy, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["Entropy"])
+    key = "original_firstorder_Entropy"
+    return _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
+
+
+def _calc_radiomics_energy(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) -> float:
+    """Calculate PyRadiomics first-order Energy, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["Energy"])
+    key = "original_firstorder_Energy"
+    return _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
+
+
+def _calc_radiomics_iqr(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) -> float:
+    """Calculate PyRadiomics first-order InterquartileRange, normalised by phantom."""
+    ext = _make_extractor("firstorder", ["InterquartileRange"])
+    key = "original_firstorder_InterquartileRange"
+    return _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
+
+
+def _calc_glcm_contrast(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) -> float:
+    """Calculate PyRadiomics GLCM Contrast, normalised by phantom."""
+    ext = _make_extractor("glcm", ["Contrast"])
+    key = "original_glcm_Contrast"
+    return _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
+
+
+def _calc_glcm_homogeneity(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) -> float:
+    """Calculate PyRadiomics GLCM Homogeneity, normalised by phantom."""
+    ext = _make_extractor("glcm", ["Idm"])
+    key = "original_glcm_Idm"
+    return _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
+
+
+def _calc_glcm_correlation(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) -> float:
+    """Calculate PyRadiomics GLCM Correlation, normalised by phantom."""
+    ext = _make_extractor("glcm", ["Correlation"])
+    key = "original_glcm_Correlation"
+    return _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
+
+
+def _calc_glcm_energy(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray) -> float:
+    """Calculate PyRadiomics GLCM JointEnergy, normalised by phantom."""
+    ext = _make_extractor("glcm", ["JointEnergy"])
+    key = "original_glcm_JointEnergy"
+    return _safe_ratio(
+        _extract_feature(ext, scan_rf_window, key),
+        _extract_feature(ext, phantom_rf_window, key),
+    )
+
+
+# ------------------------------------------------------------------
 # First-Order Radiomics features  (scan / phantom normalised)
 # ------------------------------------------------------------------
 # Each function:

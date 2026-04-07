@@ -68,9 +68,8 @@ def bmode_radiomics_mean_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order Mean feature."""
-    radiomics.bmode_radiomics_mean(
-        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
-    )
+    value = radiomics._calc_radiomics_mean(scan_rf_window, phantom_rf_window)
+    window.results.bmode_radiomics_mean = value
 
 
 @supported_spatial_dims(2, 3)
@@ -81,9 +80,8 @@ def bmode_radiomics_std_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order Standard Deviation feature."""
-    radiomics.bmode_radiomics_std(
-        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
-    )
+    value = radiomics._calc_radiomics_std(scan_rf_window, phantom_rf_window)
+    window.results.bmode_radiomics_std = value
 
 
 @supported_spatial_dims(2, 3)
@@ -94,9 +92,8 @@ def bmode_radiomics_median_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order Median feature."""
-    radiomics.bmode_radiomics_median(
-        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
-    )
+    value = radiomics._calc_radiomics_median(scan_rf_window, phantom_rf_window)
+    window.results.bmode_radiomics_median = value
 
 
 @supported_spatial_dims(2, 3)
@@ -107,9 +104,8 @@ def bmode_radiomics_entropy_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order Entropy feature."""
-    radiomics.bmode_radiomics_entropy(
-        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
-    )
+    value = radiomics._calc_radiomics_entropy(scan_rf_window, phantom_rf_window)
+    window.results.bmode_radiomics_entropy = value
 
 
 @supported_spatial_dims(2, 3)
@@ -120,9 +116,8 @@ def bmode_radiomics_energy_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order Energy feature."""
-    radiomics.bmode_radiomics_energy(
-        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
-    )
+    value = radiomics._calc_radiomics_energy(scan_rf_window, phantom_rf_window)
+    window.results.bmode_radiomics_energy = value
 
 
 @supported_spatial_dims(2, 3)
@@ -133,9 +128,8 @@ def bmode_radiomics_iqr_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics first-order InterquartileRange feature."""
-    radiomics.bmode_radiomics_iqr(
-        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
-    )
+    value = radiomics._calc_radiomics_iqr(scan_rf_window, phantom_rf_window)
+    window.results.bmode_radiomics_iqr = value
 
 
 @supported_spatial_dims(2, 3)
@@ -146,9 +140,8 @@ def bmode_glcm_contrast_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics GLCM Contrast feature."""
-    radiomics.bmode_glcm_contrast(
-        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
-    )
+    value = radiomics._calc_glcm_contrast(scan_rf_window, phantom_rf_window)
+    window.results.bmode_glcm_contrast = value
 
 
 @supported_spatial_dims(2, 3)
@@ -159,9 +152,8 @@ def bmode_glcm_homogeneity_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics GLCM Homogeneity feature."""
-    radiomics.bmode_glcm_homogeneity(
-        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
-    )
+    value = radiomics._calc_glcm_homogeneity(scan_rf_window, phantom_rf_window)
+    window.results.bmode_glcm_homogeneity = value
 
 
 @supported_spatial_dims(2, 3)
@@ -172,9 +164,8 @@ def bmode_glcm_correlation_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics GLCM Correlation feature."""
-    radiomics.bmode_glcm_correlation(
-        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
-    )
+    value = radiomics._calc_glcm_correlation(scan_rf_window, phantom_rf_window)
+    window.results.bmode_glcm_correlation = value
 
 
 @supported_spatial_dims(2, 3)
@@ -185,6 +176,5 @@ def bmode_glcm_energy_wrapper(
     image_data: UltrasoundRfImage, **kwargs
 ) -> None:
     """Wrapper for PyRadiomics GLCM Energy feature."""
-    radiomics.bmode_glcm_energy(
-        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
-    )
+    value = radiomics._calc_glcm_energy(scan_rf_window, phantom_rf_window)
+    window.results.bmode_glcm_energy = value
