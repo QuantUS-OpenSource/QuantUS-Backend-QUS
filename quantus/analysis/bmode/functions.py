@@ -19,39 +19,40 @@ from . import radiomics
 def bmode_intensity(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
                     window: Window, config: RfAnalysisConfig, 
                     image_data: UltrasoundRfImage, **kwargs) -> None:
-    """Compute B-Mode intensity (mean of log-compressed envelope).
-    """
-    # Envelope detection (simple Hilbert transform is usually done before, 
-    # but here we might just take the magnitude if it's already IQ or Hilbert)
-    # For RF data, we usually need the envelope.
-    from scipy.signal import hilbert
-    envelope = np.abs(hilbert(scan_rf_window, axis=0))
+    """Compute B-Mode intensity (mean of log-compressed envelope), normalised by phantom."""
+    # Calculate for scan
+    scan_envelope = np.abs(hilbert(scan_rf_window, axis=0))
+    scan_log_env = 20.0 * np.log10(scan_envelope + 1e-10)
+    scan_intensity = np.mean(scan_log_env)
     
-    # Log compression
-    log_envelope = 20 * np.log10(envelope + 1e-10)
+    # Calculate for phantom
+    phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
+    phantom_log_env = 20.0 * np.log10(phantom_envelope + 1e-10)
+    phantom_intensity = np.mean(phantom_log_env)
     
-    # Mean intensity in the window
-    window.results.bmode_mean = np.mean(log_envelope)
+    # Apply phantom normalization
+    window.results.bmode_mean = scan_intensity / (phantom_intensity + 1e-10)
 
 @supported_spatial_dims(2, 3)
 @output_vars("snr")
 def bmode_snr(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
                     window: Window, config: RfAnalysisConfig, 
                     image_data: UltrasoundRfImage, **kwargs) -> None:
-    """Compute Signal-to-Noise Ratio (SNR) of the envelope.
-    """
-    from scipy.signal import hilbert
-    envelope = np.abs(hilbert(scan_rf_window, axis=0))
+    """Compute Signal-to-Noise Ratio (SNR) of the envelope, normalised by phantom."""
+    # Calculate SNR for scan
+    scan_envelope = np.abs(hilbert(scan_rf_window, axis=0))
+    scan_mean = np.mean(scan_envelope)
+    scan_std = np.std(scan_envelope)
+    scan_snr = scan_mean / (scan_std + 1e-10)
     
-    mean_val = np.mean(envelope)
-    std_val = np.std(envelope)
+    # Calculate SNR for phantom
+    phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
+    phantom_mean = np.mean(phantom_envelope)
+    phantom_std = np.std(phantom_envelope)
+    phantom_snr = phantom_mean / (phantom_std + 1e-10)
     
-    if std_val > 0:
-        snr = mean_val / std_val
-    else:
-        snr = 0
-        
-    window.results.snr = snr
+    # Apply phantom normalization
+    window.results.snr = scan_snr / (phantom_snr + 1e-10)
 
 
 # ------------------------------------------------------------------
