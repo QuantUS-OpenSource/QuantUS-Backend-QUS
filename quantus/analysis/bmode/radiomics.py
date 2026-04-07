@@ -10,9 +10,16 @@ integration (setting window.results) is handled by wrapper functions in function
 """
 
 import numpy as np
-import SimpleITK as sitk
 from scipy.signal import hilbert
-from radiomics import featureextractor
+
+# Try to import radiomics features, but make it optional
+try:
+    import SimpleITK as sitk
+    from radiomics import featureextractor
+    RADIOMICS_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: PyRadiomics not available. B-Mode radiomics features will not work: {e}")
+    RADIOMICS_AVAILABLE = False
 
 
 # =============================================================================
@@ -47,61 +54,76 @@ def _get_log_envelope(rf_window: np.ndarray) -> np.ndarray:
     return np.nan_to_num(log_env, nan=0.0, posinf=0.0, neginf=0.0)
 
 
-def _build_radiomics_image_and_mask(log_env: np.ndarray):
-    """
-    Wrap a log-envelope array as a pair of SimpleITK objects suitable for
-    PyRadiomics. The mask is all-ones (label = 1), covering the entire
-    window — real spatial masking is handled upstream by the QuantUS toolbox.
-    
-    A single voxel is set to label 2 at position [0,0] as a technical 
-    requirement: PyRadiomics internally validates that more than one label 
-    value exists in the mask before recognising label 1 as a valid region. 
-    This does not spatially restrict the computation in any way.
-    """
-    image = sitk.GetImageFromArray(log_env.astype(np.float32))
-    mask_array = np.ones_like(log_env, dtype=np.uint8)
-    mask_array.flat[0] = 2  # sentinel: satisfies PyRadiomics label validation
-    mask = sitk.GetImageFromArray(mask_array)
-    mask.CopyInformation(image)
-    return image, mask
+if RADIOMICS_AVAILABLE:
+    def _build_radiomics_image_and_mask(log_env: np.ndarray):
+        """
+        Wrap a log-envelope array as a pair of SimpleITK objects suitable for
+        PyRadiomics. The mask is all-ones (label = 1), covering the entire
+        window — real spatial masking is handled upstream by the QuantUS toolbox.
+        
+        A single voxel is set to label 2 at position [0,0] as a technical 
+        requirement: PyRadiomics internally validates that more than one label 
+        value exists in the mask before recognising label 1 as a valid region. 
+        This does not spatially restrict the computation in any way.
+        """
+        image = sitk.GetImageFromArray(log_env.astype(np.float32))
+        mask_array = np.ones_like(log_env, dtype=np.uint8)
+        mask_array.flat[0] = 2  # sentinel: satisfies PyRadiomics label validation
+        mask = sitk.GetImageFromArray(mask_array)
+        mask.CopyInformation(image)
+        return image, mask
 
 
-def _make_extractor(feature_class: str, feature_names: list) -> featureextractor.RadiomicsFeatureExtractor:
-    """
-    Return a RadiomicsFeatureExtractor configured to compute only the
-    requested features on label = 1.  Resampling is disabled to prevent
-    mask/image geometry mismatches on small windowed arrays.
-    """
-    extractor = featureextractor.RadiomicsFeatureExtractor()
-    extractor.disableAllFeatures()
-    extractor.enableFeaturesByName(**{feature_class: feature_names})
-    extractor.settings["label"] = 1
-    extractor.settings["resampledPixelSpacing"] = None
-    extractor.settings["interpolator"] = sitk.sitkNearestNeighbor
-    return extractor
+    def _make_extractor(feature_class: str, feature_names: list):
+        """
+        Return a RadiomicsFeatureExtractor configured to compute only the
+        requested features on label = 1.  Resampling is disabled to prevent
+        mask/image geometry mismatches on small windowed arrays.
+        """
+        extractor = featureextractor.RadiomicsFeatureExtractor()
+        extractor.disableAllFeatures()
+        extractor.enableFeaturesByName(**{feature_class: feature_names})
+        extractor.settings["label"] = 1
+        extractor.settings["resampledPixelSpacing"] = None
+        extractor.settings["interpolator"] = sitk.sitkNearestNeighbor
+        return extractor
 
 
-def _extract_feature(extractor, rf_window: np.ndarray, key: str):
-    """
-    Run PyRadiomics on a single RF window and return the named feature value.
-    Returns None if rf_window is None (e.g. phantom not provided by QuantUS).
-    """
-    if rf_window is None:
-        return None
-    log_env = _get_log_envelope(rf_window)
-    image, mask = _build_radiomics_image_and_mask(log_env)
-    return float(extractor.execute(image, mask)[key])
+    def _extract_feature(extractor, rf_window: np.ndarray, key: str):
+        """
+        Run PyRadiomics on a single RF window and return the named feature value.
+        Returns None if rf_window is None (e.g. phantom not provided by QuantUS).
+        """
+        if rf_window is None:
+            return None
+        log_env = _get_log_envelope(rf_window)
+        image, mask = _build_radiomics_image_and_mask(log_env)
+        return float(extractor.execute(image, mask)[key])
 
 
-def _safe_ratio(scan_val: float, phantom_val, eps: float = 1e-10) -> float:
-    """
-    Divide scan feature by phantom feature, guarding against near-zero
-    denominators.  If phantom_val is None (phantom window unavailable),
-    returns the raw scan value instead of a normalised ratio.
-    """
-    if phantom_val is None:
-        return float(scan_val)
-    return float(scan_val / (phantom_val + eps))
+    def _safe_ratio(scan_val: float, phantom_val, eps: float = 1e-10) -> float:
+        """
+        Divide scan feature by phantom feature, guarding against near-zero
+        denominators.  If phantom_val is None (phantom window unavailable),
+        returns the raw scan value instead of a normalised ratio.
+        """
+        if phantom_val is None:
+            return float(scan_val)
+        return float(scan_val / (phantom_val + eps))
+
+else:
+    # Stub implementations when radiomics is not available
+    def _build_radiomics_image_and_mask(log_env: np.ndarray):
+        raise RuntimeError("PyRadiomics is not installed. Cannot compute radiomics features.")
+
+    def _make_extractor(feature_class: str, feature_names: list):
+        raise RuntimeError("PyRadiomics is not installed. Cannot compute radiomics features.")
+
+    def _extract_feature(extractor, rf_window: np.ndarray, key: str):
+        raise RuntimeError("PyRadiomics is not installed. Cannot compute radiomics features.")
+
+    def _safe_ratio(scan_val: float, phantom_val, eps: float = 1e-10) -> float:
+        raise RuntimeError("PyRadiomics is not installed. Cannot compute radiomics features.")
 
 
 # ------------------------------------------------------------------
