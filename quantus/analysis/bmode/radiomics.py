@@ -11,14 +11,18 @@ integration (setting window.results) is handled by wrapper functions in function
 
 import numpy as np
 from scipy.signal import hilbert
+import warnings
 
 # Try to import radiomics features, but make it optional
+# Suppress warnings since radiomics is optional
 try:
     import SimpleITK as sitk
-    from radiomics import featureextractor
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore')
+        from radiomics import featureextractor
     RADIOMICS_AVAILABLE = True
-except ImportError as e:
-    print(f"Warning: PyRadiomics not available. B-Mode radiomics features will not work: {e}")
+except (ImportError, Exception):
+    # PyRadiomics not available - skip silently
     RADIOMICS_AVAILABLE = False
 
 
