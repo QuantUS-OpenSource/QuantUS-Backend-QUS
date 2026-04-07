@@ -6,20 +6,8 @@ from ...data_objs.analysis_config import RfAnalysisConfig
 from ...data_objs.analysis import Window
 from ...data_objs.image import UltrasoundRfImage
 
-# Import radiomics functions from dedicated module
-from .radiomics import (
-    bmode_radiomics_mean,
-    bmode_radiomics_std,
-    bmode_radiomics_median,
-    bmode_radiomics_entropy,
-    bmode_radiomics_energy,
-    bmode_radiomics_iqr,
-    bmode_glcm_contrast,
-    bmode_glcm_homogeneity,
-    bmode_glcm_correlation,
-    bmode_glcm_energy,
-    RADIOMICS_MAP,
-)
+# Import radiomics module for wrapper functions
+from . import radiomics
 
 
 # ------------------------------------------------------------------
@@ -67,9 +55,136 @@ def bmode_snr(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
 
 
 # ------------------------------------------------------------------
-# Radiomics functions are now imported from the radiomics module
+# Radiomics wrapper functions - delegate to radiomics module
 # ------------------------------------------------------------------
-# For radiomics-related features, see: radiomics.py
-# - First-order features: bmode_radiomics_mean, bmode_radiomics_std, etc.
-# - GLCM features: bmode_glcm_contrast, bmode_glcm_homogeneity, etc.
-# ------------------------------------------------------------------
+# Each wrapper calls the corresponding radiomics function and stores result
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_radiomics_mean")
+def bmode_radiomics_mean_wrapper(
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """Wrapper for PyRadiomics first-order Mean feature."""
+    radiomics.bmode_radiomics_mean(
+        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
+    )
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_radiomics_std")
+def bmode_radiomics_std_wrapper(
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """Wrapper for PyRadiomics first-order Standard Deviation feature."""
+    radiomics.bmode_radiomics_std(
+        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
+    )
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_radiomics_median")
+def bmode_radiomics_median_wrapper(
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """Wrapper for PyRadiomics first-order Median feature."""
+    radiomics.bmode_radiomics_median(
+        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
+    )
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_radiomics_entropy")
+def bmode_radiomics_entropy_wrapper(
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """Wrapper for PyRadiomics first-order Entropy feature."""
+    radiomics.bmode_radiomics_entropy(
+        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
+    )
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_radiomics_energy")
+def bmode_radiomics_energy_wrapper(
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """Wrapper for PyRadiomics first-order Energy feature."""
+    radiomics.bmode_radiomics_energy(
+        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
+    )
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_radiomics_iqr")
+def bmode_radiomics_iqr_wrapper(
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """Wrapper for PyRadiomics first-order InterquartileRange feature."""
+    radiomics.bmode_radiomics_iqr(
+        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
+    )
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_glcm_contrast")
+def bmode_glcm_contrast_wrapper(
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """Wrapper for PyRadiomics GLCM Contrast feature."""
+    radiomics.bmode_glcm_contrast(
+        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
+    )
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_glcm_homogeneity")
+def bmode_glcm_homogeneity_wrapper(
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """Wrapper for PyRadiomics GLCM Homogeneity feature."""
+    radiomics.bmode_glcm_homogeneity(
+        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
+    )
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_glcm_correlation")
+def bmode_glcm_correlation_wrapper(
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """Wrapper for PyRadiomics GLCM Correlation feature."""
+    radiomics.bmode_glcm_correlation(
+        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
+    )
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_glcm_energy")
+def bmode_glcm_energy_wrapper(
+    scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+    window: Window, config: RfAnalysisConfig,
+    image_data: UltrasoundRfImage, **kwargs
+) -> None:
+    """Wrapper for PyRadiomics GLCM Energy feature."""
+    radiomics.bmode_glcm_energy(
+        scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs
+    )
