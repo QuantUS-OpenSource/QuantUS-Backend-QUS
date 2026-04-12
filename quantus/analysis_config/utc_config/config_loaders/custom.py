@@ -34,6 +34,9 @@ def custom(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         assert type(kwargs["window_thresh"]) is float, "window_thresh must be a float"
         assert type(kwargs["axial_overlap"]) is float, "axial_overlap must be a float"
         assert type(kwargs["lateral_overlap"]) is float, "lateral_overlap must be a float"
+        assert type(kwargs['speed_of_sound']) is float, 'speed_of_sound must be a float'
+        assert type(kwargs['ax_win_size_units']) is int, 'ax_win_size_units must be a int'
+        assert type(kwargs['lat_win_size_units']) is int, 'lat_win_size_units must be a int'        
 
         out.transducer_freq_band = kwargs["transducer_freq_band"]
         out.analysis_freq_band = kwargs["analysis_freq_band"]
@@ -44,6 +47,9 @@ def custom(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         out.window_thresh = kwargs["window_thresh"]
         out.axial_overlap = kwargs["axial_overlap"]
         out.lateral_overlap = kwargs["lateral_overlap"]
+        out.speed_of_sound = kwargs['speed_of_sound']
+        out.ax_win_size_units = kwargs['ax_win_size_units']
+        out.lat_win_size_units = kwargs['lat_win_size_units']
         out.cor_win_size = kwargs.get("cor_win_size", None)
         out.coronal_overlap = kwargs.get("coronal_overlap", None)
 
