@@ -18,8 +18,8 @@ def clarius_L15_config(analysis_path: str, **kwargs) -> RfAnalysisConfig:
     out.sampling_frequency = 30e6 # Hz, following Nyquist criterion
 
     # Windowing parameters - adjusted for smaller windows due to high frequency
-    out.ax_win_size = 20  # axial length per window (mm) 
-    out.lat_win_size = 40  # lateral length per window (mm)
+    out.ax_win_size = 2  # axial length per window (mm) 
+    out.lat_win_size = 4  # lateral length per window (mm)
     out.window_thresh = 0.5  # % of window area required to be considered in ROI
     out.axial_overlap = 0.75  # % of window overlap in axial direction
     out.lateral_overlap = 0.75  # % of window overlap in lateral direction
