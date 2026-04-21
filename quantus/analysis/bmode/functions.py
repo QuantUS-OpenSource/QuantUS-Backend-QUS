@@ -71,6 +71,161 @@ def bmode_snr(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
     logger.debug(f"B-Mode SNR result: {result}")
 
 
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_std")
+def bmode_std(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
+                    window: Window, config: RfAnalysisConfig, 
+                    image_data: UltrasoundRfImage, **kwargs) -> None:
+    """Compute B-Mode standard deviation of log-compressed envelope, normalised by phantom."""
+    logger.debug(f"Calculating B-Mode Std. Scan window shape: {scan_rf_window.shape}")
+    
+    # Calculate for scan
+    scan_envelope = np.abs(hilbert(scan_rf_window, axis=0))
+    scan_log_env = 20.0 * np.log10(scan_envelope + 1e-10)
+    scan_std = np.std(scan_log_env)
+    
+    # Calculate for phantom
+    phantom_std = 1.0
+    if phantom_rf_window is not None:
+        phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
+        phantom_log_env = 20.0 * np.log10(phantom_envelope + 1e-10)
+        phantom_std = np.std(phantom_log_env)
+    
+    # Apply phantom normalization
+    result = scan_std / (phantom_std + 1e-10)
+    window.results.bmode_std = result
+    logger.debug(f"B-Mode Std result: {result}")
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_median")
+def bmode_median(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
+                    window: Window, config: RfAnalysisConfig, 
+                    image_data: UltrasoundRfImage, **kwargs) -> None:
+    """Compute B-Mode median of log-compressed envelope, normalised by phantom."""
+    logger.debug(f"Calculating B-Mode Median. Scan window shape: {scan_rf_window.shape}")
+    
+    # Calculate for scan
+    scan_envelope = np.abs(hilbert(scan_rf_window, axis=0))
+    scan_log_env = 20.0 * np.log10(scan_envelope + 1e-10)
+    scan_median = np.median(scan_log_env)
+    
+    # Calculate for phantom
+    phantom_median = 1.0
+    if phantom_rf_window is not None:
+        phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
+        phantom_log_env = 20.0 * np.log10(phantom_envelope + 1e-10)
+        phantom_median = np.median(phantom_log_env)
+    
+    # Apply phantom normalization
+    result = scan_median / (phantom_median + 1e-10)
+    window.results.bmode_median = result
+    logger.debug(f"B-Mode Median result: {result}")
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_iqr")
+def bmode_iqr(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
+                    window: Window, config: RfAnalysisConfig, 
+                    image_data: UltrasoundRfImage, **kwargs) -> None:
+    """Compute B-Mode Interquartile Range (IQR) of log-compressed envelope, normalised by phantom."""
+    logger.debug(f"Calculating B-Mode IQR. Scan window shape: {scan_rf_window.shape}")
+    
+    # Calculate for scan
+    scan_envelope = np.abs(hilbert(scan_rf_window, axis=0))
+    scan_log_env = 20.0 * np.log10(scan_envelope + 1e-10)
+    scan_iqr = np.percentile(scan_log_env, 75) - np.percentile(scan_log_env, 25)
+    
+    # Calculate for phantom
+    phantom_iqr = 1.0
+    if phantom_rf_window is not None:
+        phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
+        phantom_log_env = 20.0 * np.log10(phantom_envelope + 1e-10)
+        phantom_iqr = np.percentile(phantom_log_env, 75) - np.percentile(phantom_log_env, 25)
+    
+    # Apply phantom normalization
+    result = scan_iqr / (phantom_iqr + 1e-10)
+    window.results.bmode_iqr = result
+    logger.debug(f"B-Mode IQR result: {result}")
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_skewness")
+def bmode_skewness(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
+                    window: Window, config: RfAnalysisConfig, 
+                    image_data: UltrasoundRfImage, **kwargs) -> None:
+    """Compute B-Mode skewness of log-compressed envelope, normalised by phantom."""
+    from scipy.stats import skew
+    logger.debug("Calculating B-Mode Skewness")
+    
+    scan_envelope = np.abs(hilbert(scan_rf_window, axis=0))
+    scan_log_env = 20.0 * np.log10(scan_envelope + 1e-10)
+    scan_skew = skew(scan_log_env.ravel())
+    
+    phantom_skew = 0.0
+    if phantom_rf_window is not None:
+        phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
+        phantom_log_env = 20.0 * np.log10(phantom_envelope + 1e-10)
+        phantom_skew = skew(phantom_log_env.ravel())
+    
+    result = scan_skew - phantom_skew
+    window.results.bmode_skewness = result
+    logger.debug(f"B-Mode Skewness result: {result}")
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_kurtosis")
+def bmode_kurtosis(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
+                    window: Window, config: RfAnalysisConfig, 
+                    image_data: UltrasoundRfImage, **kwargs) -> None:
+    """Compute B-Mode kurtosis of log-compressed envelope, normalised by phantom."""
+    from scipy.stats import kurtosis
+    logger.debug("Calculating B-Mode Kurtosis")
+    
+    scan_envelope = np.abs(hilbert(scan_rf_window, axis=0))
+    scan_log_env = 20.0 * np.log10(scan_envelope + 1e-10)
+    scan_kurt = kurtosis(scan_log_env.ravel())
+    
+    phantom_kurt = 0.0
+    if phantom_rf_window is not None:
+        phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
+        phantom_log_env = 20.0 * np.log10(phantom_envelope + 1e-10)
+        phantom_kurt = kurtosis(phantom_log_env.ravel())
+    
+    result = scan_kurt - phantom_kurt
+    window.results.bmode_kurtosis = result
+    logger.debug(f"B-Mode Kurtosis result: {result}")
+
+
+@supported_spatial_dims(2, 3)
+@output_vars("bmode_entropy")
+def bmode_entropy(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
+                    window: Window, config: RfAnalysisConfig, 
+                    image_data: UltrasoundRfImage, **kwargs) -> None:
+    """Compute Shannon Entropy of the log-compressed envelope distribution."""
+    logger.debug("Calculating B-Mode Entropy")
+    
+    def _calc_entropy(data):
+        # 100-bin histogram for entropy estimation
+        hist, _ = np.histogram(data, bins=100, density=True)
+        hist = hist[hist > 0]
+        return -np.sum(hist * np.log2(hist))
+
+    scan_envelope = np.abs(hilbert(scan_rf_window, axis=0))
+    scan_log_env = 20.0 * np.log10(scan_envelope + 1e-10)
+    scan_ent = _calc_entropy(scan_log_env)
+    
+    phantom_ent = 1.0
+    if phantom_rf_window is not None:
+        phantom_envelope = np.abs(hilbert(phantom_rf_window, axis=0))
+        phantom_log_env = 20.0 * np.log10(phantom_envelope + 1e-10)
+        phantom_ent = _calc_entropy(phantom_log_env)
+    
+    result = scan_ent / (phantom_ent + 1e-10)
+    window.results.bmode_entropy = result
+    logger.debug(f"B-Mode Entropy result: {result}")
+
+
 # ------------------------------------------------------------------
 # Radiomics wrapper functions - delegate to radiomics module
 # ------------------------------------------------------------------
