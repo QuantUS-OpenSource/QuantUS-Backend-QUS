@@ -12,6 +12,6 @@ class BmodeVisualizations(ParamapVisualizations):
     """
     def __init__(self, analysis_obj, visualization_funcs, **kwargs):
         super().__init__(analysis_obj, visualization_funcs, **kwargs)
-        # Use a consistent set of colormaps for B-mode features
-        self.cmaps = ["viridis", "plasma", "inferno", "magma"]
+        # Use colormap objects/names instead of strings to avoid 'IndexError' in draw_paramap
+        self.cmaps = [self.cmaps[0], self.cmaps[1], self.cmaps[2], self.cmaps[3]]
 
