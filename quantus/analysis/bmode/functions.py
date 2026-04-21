@@ -44,7 +44,7 @@ def bmode_intensity(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
     logger.debug(f"B-Mode Intensity result: {result}")
 
 @supported_spatial_dims(2, 3)
-@output_vars("snr")
+@output_vars("bmode_snr")
 def bmode_snr(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
                     window: Window, config: RfAnalysisConfig, 
                     image_data: UltrasoundRfImage, **kwargs) -> None:
@@ -67,7 +67,7 @@ def bmode_snr(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
     
     # Apply phantom normalization
     result = scan_snr / (phantom_snr + 1e-10)
-    window.results.snr = result
+    window.results.bmode_snr = result
     logger.debug(f"B-Mode SNR result: {result}")
 
 
