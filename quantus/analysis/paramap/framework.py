@@ -215,8 +215,8 @@ class ParamapAnalysis(ParamapAnalysisBase):
                 window.ax_min: window.ax_max + 1, window.lat_min: window.lat_max + 1
             ]
             n_ref_lines = self.image_data.phantom_rf_data.shape[1]
-            lat_start_ix = round(0.25*n_ref_lines)
-            lat_end_ix = round(0.75*n_ref_lines)
+            lat_start_ix = round(0.25*n_ref_lines)-1
+            lat_end_ix = round(0.75*n_ref_lines)-1
             phantom_window = self.image_data.phantom_rf_data[
                 window.ax_min: window.ax_max + 1, lat_start_ix: lat_end_ix+1
             ]

@@ -54,15 +54,21 @@ def bsc_transmission_compensation(scan_rf_window: np.ndarray, phantom_rf_window:
     end_frequency = config.analysis_freq_band[1]
     
     f, ps = compute_power_spec(scan_rf_window, start_frequency, end_frequency, 
-                               sampling_frequency, n_fft, use_hanning=True)
+                               sampling_frequency, n_fft, use_hanning=True,
+                               average_lines=False)
     _, ref_ps = compute_power_spec(phantom_rf_window, start_frequency, end_frequency, 
-                               sampling_frequency, n_fft, use_hanning=True)
+                               sampling_frequency, n_fft, use_hanning=True,
+                               average_lines=False)
     
     f *= 1e-6 # Hz --> MHz
     
     # Attenuation compensation
     dB_to_Np = 1 / (20 * np.log10(np.exp(1)))  # same as MATLAB
-    dist =  (((window.ax_min + window.ax_max)/2) * image_data.axial_res)/10
+    if hasattr(image_data, 'axial'):
+        axial_ix = round((window.ax_min+1 + window.ax_max+1)/2)-1
+        dist = (image_data.axial[axial_ix])/10
+    else:
+        dist =  (((window.ax_min + window.ax_max)/2) * image_data.axial_res)/10
     
     def att_exp_factor(atten, atten_exp, atten_offset):
         alpha1 = (
@@ -81,7 +87,7 @@ def bsc_transmission_compensation(scan_rf_window: np.ndarray, phantom_rf_window:
     T = np.interp(f, xy[:, 0], xy[:, 1])
     T_sq = (T ** 2)[:, np.newaxis]  # shape (num_freq, 1)
     
-    final_ps = att_comp_ps / T_sq
+    final_ps = att_comp_ps
     final_ref_ps = att_comp_ref_ps / T_sq
     
     # Average final PS
