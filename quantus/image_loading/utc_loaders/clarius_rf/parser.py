@@ -1001,7 +1001,6 @@ class ClariusParser():
         self.clarius_info_struct.upBandFreq = int(self.clarius_info_struct.centerFrequency * 1.5)
         self.clarius_info_struct.clipFact = 0.95
         self.clarius_info_struct.dynRange = 50
-        self.clarius_info_struct.rfDepthMm = self.extract_first_num(self.rf_yml_obj.rf_imaging_depth)
                 
     ###################################################################################
     
@@ -1037,7 +1036,7 @@ class ClariusParser():
                                              self.clarius_info_struct.endDepth1,
                                              desiredHeight=500)[0].scArr for i in tqdm(range(rf_atgc.shape[2]))])
             
-            self.clarius_info_struct.yResRF = self.clarius_info_struct.endDepth1 *1000 / self.clarius_info_struct.samplesPerLine
+            self.clarius_info_struct.yResRF = self.clarius_info_struct.endDepth1*1000 / self.clarius_info_struct.samplesPerLine
             self.clarius_info_struct.xResRF = self.clarius_info_struct.yResRF * (scBmodeStruct.scArr.shape[0]/scBmodeStruct.scArr.shape[1]) # placeholder
             self.clarius_info_struct.axialRes = hCm1*10 / scBmodeStruct.scArr.shape[0]
             self.clarius_info_struct.lateralRes = wCm1*10 / scBmodeStruct.scArr.shape[1]
@@ -1050,7 +1049,7 @@ class ClariusParser():
             self.clarius_data_struct.rf = np.transpose(rf_atgc, (2, 0, 1))
             
         else:
-            self.clarius_info_struct.yResRF = (self.clarius_info_struct.endDepth1 - self.clarius_info_struct.startDepth1) *1000 / bmode.shape[0] # mm/pixel
+            self.clarius_info_struct.yResRF = self.clarius_info_struct.endDepth1*1000 / self.clarius_info_struct.samplesPerLine
             self.clarius_info_struct.xResRF = self.clarius_info_struct.yResRF * (bmode.shape[0]/bmode.shape[1]) # placeholder
             self.clarius_info_struct.axialRes = self.clarius_info_struct.yResRF #mm
             self.clarius_info_struct.lateralRes = self.clarius_info_struct.xResRF #mm
