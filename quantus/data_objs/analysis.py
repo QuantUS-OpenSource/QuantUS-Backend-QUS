@@ -60,7 +60,7 @@ class ParamapAnalysisBase(ABC):
             self.generate_seg_windows()
             assert len(self.windows) > 0, "No windows generated"
 
-        for window in tqdm(self.windows):
+        for window in tqdm(self.windows, disable=True):
             self.compute_window_vals(window)
     
     @abstractmethod

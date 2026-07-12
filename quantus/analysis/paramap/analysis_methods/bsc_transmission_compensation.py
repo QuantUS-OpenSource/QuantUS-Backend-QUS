@@ -10,8 +10,8 @@ from ....data_objs.image import UltrasoundRfImage
 @output_vars("bsc")
 @required_kwargs("ref_bsc_path", "sample_atten", "sample_atten_exp", "sample_atten_offset",
                  "ref_atten", "ref_atten_exp", "ref_atten_offset",
-                 "n_fft", "cirs_path")
-@default_kwarg_vals("", 1., 1., 0., 1., 1., 0., 8192, "")
+                 "n_fft", "cirs_path", "cirs_mode")
+@default_kwarg_vals("", 1., 1., 0., 1., 1., 0., 8192, 25, 1)
 def bsc_transmission_compensation(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
             window: Window, config: RfAnalysisConfig, 
             image_data: UltrasoundRfImage, **kwargs) -> None:
@@ -48,6 +48,7 @@ def bsc_transmission_compensation(scan_rf_window: np.ndarray, phantom_rf_window:
     ref_atten_offset = kwargs['ref_atten_offset']
     n_fft = kwargs['n_fft']
     cirs_path = kwargs['cirs_path']
+    cirs_mode = kwargs['cirs_mode']
     
     sampling_frequency = config.sampling_frequency
     start_frequency = config.analysis_freq_band[0]
@@ -83,8 +84,17 @@ def bsc_transmission_compensation(scan_rf_window: np.ndarray, phantom_rf_window:
     att_comp_ref_ps = ref_ps * att_exp_factor(ref_atten, ref_atten_exp, ref_atten_offset)
     
     # Transmission compensation
-    xy = np.loadtxt(cirs_path)
-    T = np.interp(f, xy[:, 0], xy[:, 1])
+    if cirs_mode == 1:
+        L = float(cirs_path)  # thickness in um
+        c1, c2, c3 = 1485., 2400., 1540.
+        rho1, rho2, rho3 = 1000., 1690., 1040.
+        r1, r2, r3 = rho1*c1, rho2*c2, rho3*c3
+        k2L = 2 * np.pi * f * L / c2  # f in MHz, L in um → correct units
+        T = 4. / (2 + (r3/r1 + r1/r3)*np.cos(k2L)**2 +
+                  (r2**2/(r1*r3) + r1*r3/r2**2)*np.sin(k2L)**2)
+    else:  # opt == 2
+        xy = np.loadtxt(cirs_path)
+        T = np.interp(f, xy[:, 0], xy[:, 1])
     T_sq = (T ** 2)[:, np.newaxis]  # shape (num_freq, 1)
     
     final_ps = att_comp_ps
