@@ -4,6 +4,10 @@ Image loading plugins include all data loading parsers for QuantUS. These parser
 
 New plugins can be dropped into this folder to extend the capabilities of QuantUS without any additional programming required.
 
+## External / private plugins
+
+Plugins don't have to live in this repo. Set `QUANTUS_PLUGIN_DIR` (defaults to `.quantus/plugins/` at the repo root) to a directory containing an `image_loading/` subfolder with the same plugin structure described below (e.g. `$QUANTUS_PLUGIN_DIR/image_loading/your_plugin_name/main.py`), and it's picked up alongside the built-ins — no changes to this repo needed. This is how private/proprietary loaders are meant to be distributed (an approved user drops a received plugin folder in) and how a future GUI can load plugins dynamically. A plugin here with the same folder name as a built-in one overrides it (with a warning); everything else stays available.
+
 ## Plugin implementation
 
 ### Core data class

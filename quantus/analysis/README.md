@@ -4,6 +4,10 @@ This directly contains all QUS analysis methods used for analysis. The plugin sy
 
 All analysis is currently based around parametric maps via the sliding window technique.
 
+## External / private plugins
+
+Plugins don't have to live in this repo. Set `QUANTUS_PLUGIN_DIR` (defaults to `.quantus/plugins/` at the repo root) to a directory containing an `analysis/` subfolder mirroring this layout (e.g. `$QUANTUS_PLUGIN_DIR/analysis/paramap/analysis_methods/your_method.py`, or a whole new `$QUANTUS_PLUGIN_DIR/analysis/your_type/` analysis type), and it's picked up alongside the built-ins — no changes to this repo needed. This is how private/proprietary QUS methods are meant to be distributed (an approved user drops a received plugin file in) and how a future GUI can load plugins dynamically. A plugin here with the same name as a built-in one overrides it (with a warning); everything else stays available.
+
 ## Plugin Implementation
 
 ### Plugin Structure

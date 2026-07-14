@@ -4,6 +4,10 @@ Analysis configuration loading plugins load scan metadata and parametric map par
 
 New plugins can be added to the [quantus/analysis_config/utc_config/config_loaders](utc_config/config_loaders) folder as a new .py file containing a function, and will extend the capabilities of QuantUS without any additional programming required.
 
+## External / private plugins
+
+Plugins don't have to live in this repo. Set `QUANTUS_PLUGIN_DIR` (defaults to `.quantus/plugins/` at the repo root) to a directory containing an `analysis_config/` subfolder with plugin files in the same form described below (e.g. `$QUANTUS_PLUGIN_DIR/analysis_config/your_loader.py`), and it's picked up alongside the built-ins — no changes to this repo needed. This is how private/proprietary loaders are meant to be distributed (an approved user drops a received plugin file in) and how a future GUI can load plugins dynamically. A plugin here with the same name as a built-in one overrides it (with a warning); everything else stays available.
+
 ## Plugin Implementation
 
 ### Core data class
