@@ -1,8 +1,15 @@
 from typing import List
 
+from ..plugin_utils import attr_decorator
+
+
 def extensions(*exts: List[str]) -> dict:
     """
     A decorator to specify the acceptable file extensions for a function.
+
+    Unlike the other stages' plugin functions, seg loaders are discovered as
+    module-level dicts (see quantus/seg_loading/options.py), so this decorator
+    wraps the function in a dict instead of setting a plain attribute.
 
     Args:
         exts (list): List of acceptable file extensions.
@@ -20,33 +27,6 @@ def extensions(*exts: List[str]) -> dict:
         return func
     return decorator
 
-def required_kwargs(*kwarg_names: List[str]) -> dict:
-    """
-    A decorator to specify the required keyword arguments for a function.
 
-    Args:
-        kwarg_names (list): List of required keyword argument names.
-
-    Returns:
-        function: The decorated function with the specified keyword arguments.
-    """
-    def decorator(func):
-        func.required_kwargs = kwarg_names
-        return func
-    return decorator
-
-def default_kwarg_vals(*vals: List[str]):
-    """
-    A decorator to specify default values for keyword arguments in a function.
-
-    Args:
-        vals (list): List of default values for the keyword arguments.
-
-    Returns:
-        function: The decorated function with default keyword argument values.
-    """
-    def decorator(func):
-        func.default_kwarg_vals = vals
-        return func
-    
-    return decorator
+required_kwargs = attr_decorator('required_kwargs')
+default_kwarg_vals = attr_decorator('default_kwarg_vals')
