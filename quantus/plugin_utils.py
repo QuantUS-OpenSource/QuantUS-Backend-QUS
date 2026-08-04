@@ -138,6 +138,24 @@ def discover_plugin_classes(base_dir: Path, package: str, module_name: str,
     return discovered
 
 
+def _candidate_module_names(directory: Path) -> List[str]:
+    """Immediate children of `directory` importable as a submodule: either a `.py` file
+    (imported by its stem) or a folder containing `__init__.py` (imported by its folder
+    name, as a package) -- the folder form lets a plugin bundle sibling data assets (e.g.
+    a lookup table) alongside its code, loaded via a path relative to the plugin's own
+    `__file__`. Anything starting with "_" is skipped either way.
+    """
+    names = []
+    for entry in sorted(directory.iterdir()):
+        if entry.name.startswith("_"):
+            continue
+        if entry.is_file() and entry.suffix == ".py":
+            names.append(entry.stem)
+        elif entry.is_dir() and (entry / "__init__.py").is_file():
+            names.append(entry.name)
+    return names
+
+
 def discover_marked_functions(package: str, relative_module_prefix: str, funcs_dir: Path,
                                marker_attr: str, external_funcs_dir: Optional[Path] = None) -> dict:
     """Import every file in funcs_dir and collect module-level callables carrying marker_attr.
@@ -147,19 +165,18 @@ def discover_marked_functions(package: str, relative_module_prefix: str, funcs_d
         relative_module_prefix: Relative module path containing funcs_dir (e.g. ".paramap.analysis_methods").
         funcs_dir: Directory whose files are candidate built-in plugin functions.
         marker_attr: Attribute name (set by a decorator) that marks a callable as a discoverable plugin.
-        external_funcs_dir: If given, also imports every file here directly (not as a
-            package submodule) and merges the results in additively (external wins on collision).
+        external_funcs_dir: If given, also imports every file/folder-plugin here directly
+            (not as a package submodule) and merges the results in additively (external
+            wins on collision).
 
     Returns:
         dict: {name: callable}.
     """
     discovered = {}
     if funcs_dir.is_dir():
-        for file in sorted(funcs_dir.iterdir()):
-            if not file.is_file() or file.suffix != ".py" or file.name.startswith("_"):
-                continue
+        for module_name in _candidate_module_names(funcs_dir):
             try:
-                module = importlib.import_module(f"{relative_module_prefix}.{file.stem}", package=package)
+                module = importlib.import_module(f"{relative_module_prefix}.{module_name}", package=package)
             except ModuleNotFoundError:
                 continue
             for name, obj in vars(module).items():
@@ -168,10 +185,8 @@ def discover_marked_functions(package: str, relative_module_prefix: str, funcs_d
 
     if external_funcs_dir and external_funcs_dir.is_dir():
         external = {}
-        for file in sorted(external_funcs_dir.iterdir()):
-            if not file.is_file() or file.suffix != ".py" or file.name.startswith("_"):
-                continue
-            module = import_external_module(external_funcs_dir, file.stem)
+        for module_name in _candidate_module_names(external_funcs_dir):
+            module = import_external_module(external_funcs_dir, module_name)
             for name, obj in vars(module).items():
                 if callable(obj) and not isinstance(obj, type) and hasattr(obj, marker_attr):
                     external[name] = obj
