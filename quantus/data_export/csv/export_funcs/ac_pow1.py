@@ -1,28 +1,18 @@
 from typing import Dict
 
-import numpy as np
-from scipy.optimize import curve_fit
-
 from ..decorators import required_kwargs
 from ....data_objs.visualizations import ParamapDrawingBase
 
-def power1_model(x, a, b):
-    return a * (x ** b)
-
 @required_kwargs()
 def ac_pow1(visualizations_obj: ParamapDrawingBase, data_dict: Dict[str, str], **kwargs) -> None:
-    """Export sample AC values computed using the power1 model for curve fitting.
+    """Export sample AC values computed using the power1 model for curve fitting. The actual
+    cross-window averaging and curve fit happens in the "ac_scan_stats" aggregate analysis
+    function (quantus/analysis/paramap/analysis_aggregators/ac_scan_stats.py), since it needs
+    every window's AC-vs-frequency curve simultaneously -- this function just reads the result.
     """
-    params = visualizations_obj.analysis_obj.windows[0].results.__dict__.keys()
-    
-    assert "att_coefs" in params and "att_subf" in params, "Must run \"attenuation_coef\" plugin to use this"
-    
-    subf = visualizations_obj.analysis_obj.windows[0].results.att_subf
-    att_all = np.array([w.results.att_coefs for w in visualizations_obj.analysis_obj.windows]).T
-    att_ave = np.mean(att_all, axis=1)
-    
-    popt, pcov = curve_fit(power1_model, subf, att_ave)
-    sample_atten_a, sample_atten_b = popt
-    
-    data_dict["AC_power1_a"] = sample_atten_a
-    data_dict["AC_power1_b"] = sample_atten_b
+    aggregate_results = visualizations_obj.analysis_obj.aggregate_results
+    assert hasattr(aggregate_results, "AC_power1_a") and hasattr(aggregate_results, "AC_power1_b"), \
+        "Must run \"ac_scan_stats\" aggregate analysis function to use this"
+
+    data_dict["AC_power1_a"] = aggregate_results.AC_power1_a
+    data_dict["AC_power1_b"] = aggregate_results.AC_power1_b

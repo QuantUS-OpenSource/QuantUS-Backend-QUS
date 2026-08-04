@@ -7,7 +7,7 @@ from ....data_objs.analysis import Window
 from ....data_objs.image import UltrasoundRfImage
 
 @supported_spatial_dims(2, 3)
-@output_vars("bsc")
+@output_vars("bsc", "bsc_curve", "bsc_freq_mhz")
 @required_kwargs("ref_bsc_path", "sample_atten", "sample_atten_exp", "sample_atten_offset",
                  "ref_atten", "ref_atten_exp", "ref_atten_offset",
                  "n_fft", "cirs_path", "cirs_mode")
@@ -108,8 +108,12 @@ def bsc_transmission_compensation(scan_rf_window: np.ndarray, phantom_rf_window:
     ref_bsc = np.interp(f, ref_bsc_data[:, 0], ref_bsc_data[:, 1])
     
     bsc = (final_ps / final_ref_ps) * ref_bsc
-    
+
     c_freq_mhz = config.center_frequency / 1e6
     c_freq_ix = np.argmin(abs(f - c_freq_mhz))
 
     window.results.bsc = bsc[c_freq_ix]
+    # Full curve, consumed by the "bsc_scan_stats" aggregate function for the
+    # Lizzi-Feleppa BSC slope/intercept/midband fit (needs every window's curve at once).
+    window.results.bsc_curve = bsc
+    window.results.bsc_freq_mhz = f

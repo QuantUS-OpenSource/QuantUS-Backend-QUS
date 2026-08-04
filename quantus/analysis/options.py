@@ -3,7 +3,7 @@ from typing import Tuple
 
 from argparse import ArgumentParser
 
-from ..plugin_utils import discover_plugin_classes, discover_marked_functions, get_external_plugin_root, get_plugin_params
+from ..plugin_utils import discover_plugin_classes, discover_marked_functions, get_external_plugin_root, get_plugin_params, merge_external_plugins
 
 def analysis_args(parser: ArgumentParser):
     parser.add_argument('analysis_type', type=str, default='spectral_paramap',
@@ -71,5 +71,18 @@ def get_analysis_types() -> Tuple[dict, dict]:
             __package__, f".{type_name}.analysis_methods", methods_path, "outputs",
             external_funcs_dir=external_methods_path,
         )
+
+        # Aggregate functions (@location("aggregate")) live in their own sibling folder,
+        # analysis_aggregators/, instead of nested inside analysis_methods/ -- keeps "a folder
+        # under analysis_methods/ is one plugin" unambiguous (e.g. homodyned_k_params/) rather
+        # than sometimes meaning a whole category of plugins. Discovered the same way as
+        # analysis_methods/, then merged into the same dict.
+        aggregators_path = current_dir / type_name / "analysis_aggregators"
+        external_aggregators_path = external_root / "analysis" / type_name / "analysis_aggregators" if external_root else None
+        aggregate_functions = discover_marked_functions(
+            __package__, f".{type_name}.analysis_aggregators", aggregators_path, "outputs",
+            external_funcs_dir=external_aggregators_path,
+        )
+        merge_external_plugins(functions[type_name], aggregate_functions, aggregators_path)
 
     return types, functions
