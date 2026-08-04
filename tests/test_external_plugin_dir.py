@@ -67,3 +67,47 @@ def test_external_analysis_method_collision_overrides_builtin(monkeypatch, tmp_p
     with pytest.warns(UserWarning, match="overrides the built-in plugin"):
         _, functions = get_analysis_types()
     assert functions["paramap"]["attenuation_coef"].outputs == ("test_ext_override",)
+
+
+def test_external_analysis_method_folder_plugin_discovered(monkeypatch, tmp_path):
+    """A plugin may also be a folder (with __init__.py) instead of a single .py file --
+    lets it bundle sibling data assets (e.g. a lookup table), same shape as the built-in
+    homodyned_k_params plugin (quantus/analysis/paramap/analysis_methods/homodyned_k_params/).
+    """
+    _write(tmp_path / "analysis" / "paramap" / "analysis_methods" / "test_ext_folder_method" / "__init__.py", """
+        from quantus.analysis.paramap.decorators import output_vars
+
+        @output_vars("test_ext_folder_output")
+        def test_ext_folder_method(scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs):
+            pass
+    """)
+    monkeypatch.setenv("QUANTUS_PLUGIN_DIR", str(tmp_path))
+
+    _, functions = get_analysis_types()
+    assert "test_ext_folder_method" in functions["paramap"]
+    assert functions["paramap"]["test_ext_folder_method"].outputs == ("test_ext_folder_output",)
+    assert "attenuation_coef" in functions["paramap"]  # built-ins still present alongside it
+
+
+def test_external_aggregate_plugin_discovered_from_sibling_folder(monkeypatch, tmp_path):
+    """A @location("aggregate") plugin lives in its own sibling folder, analysis_aggregators/,
+    not nested inside analysis_methods/ -- mirrors the built-in layout
+    (quantus/analysis/paramap/analysis_aggregators/ac_scan_stats.py etc.) and must be
+    discovered from there, merged in alongside window/full_segmentation plugins found in
+    analysis_methods/.
+    """
+    _write(tmp_path / "analysis" / "paramap" / "analysis_aggregators" / "test_ext_aggregate_method.py", """
+        from quantus.analysis.paramap.decorators import output_vars, location
+
+        @output_vars("test_ext_aggregate_output")
+        @location("aggregate")
+        def test_ext_aggregate_method(windows, aggregate_results, config, image_data, **kwargs):
+            pass
+    """)
+    monkeypatch.setenv("QUANTUS_PLUGIN_DIR", str(tmp_path))
+
+    _, functions = get_analysis_types()
+    assert "test_ext_aggregate_method" in functions["paramap"]
+    assert functions["paramap"]["test_ext_aggregate_method"].outputs == ("test_ext_aggregate_output",)
+    assert functions["paramap"]["test_ext_aggregate_method"].location == ("aggregate",)
+    assert "attenuation_coef" in functions["paramap"]  # built-ins still present alongside it

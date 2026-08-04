@@ -35,6 +35,7 @@ class ParamapAnalysisBase(ABC):
         
         self.windows: List[Window] = []
         self.single_window: Window
+        self.aggregate_results = BlankResults()
         self.spline_x: np.ndarray
         self.spline_y: np.ndarray
         self.spline_z: np.ndarray
@@ -43,18 +44,27 @@ class ParamapAnalysisBase(ABC):
     def generate_seg_windows(self):
         """Generate windows for parametric map analysis based on user-defined segmentation."""
         pass
-                    
+
     @abstractmethod
     def compute_window_vals(self, window: Window):
         """Compute parametric map values for a single window.
-        
+
         Args:
             window (Window): Window object to store results.
         """
         pass
 
+    @abstractmethod
+    def compute_aggregate_vals(self):
+        """Compute aggregate (cross-window) results once every window has been processed,
+        writing onto self.aggregate_results. See ParamapAnalysis.compute_aggregate_vals for the
+        concrete implementation and the aggregate_evict convention.
+        """
+        pass
+
     def compute_paramaps(self):
-        """Compute UTC parameters for each window in the ROI, creating a parametric map.
+        """Compute UTC parameters for each window in the ROI, creating a parametric map,
+        then run any aggregate (cross-window) functions.
         """
         if not len(self.windows):
             self.generate_seg_windows()
@@ -62,7 +72,9 @@ class ParamapAnalysisBase(ABC):
 
         for window in tqdm(self.windows, disable=True):
             self.compute_window_vals(window)
-    
+
+        self.compute_aggregate_vals()
+
     @abstractmethod
     def compute_single_window(self):
         """Define a single window that contains all ROIs for analysis.

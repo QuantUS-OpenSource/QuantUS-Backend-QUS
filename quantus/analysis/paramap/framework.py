@@ -43,7 +43,8 @@ class ParamapAnalysis(ParamapAnalysisBase):
         """
         self.ordered_funcs = []; self.ordered_func_names = []; self.results_names = []
         self.unordered_window_func_names = set(); self.unordered_full_seg_func_names = set()
-        
+        self.unordered_aggregate_func_names = set()
+
         def assign_locs(func_name, deps, locs):
             """Assign locations for the function based on its dependencies and locations."""
             if 'window' in locs:
@@ -51,6 +52,9 @@ class ParamapAnalysis(ParamapAnalysisBase):
                 [self.unordered_full_seg_func_names.add(dep) for dep in deps]
             if 'full_segmentation' in locs:
                 self.unordered_full_seg_func_names.add(func_name)
+                [self.unordered_window_func_names.add(dep) for dep in deps]
+            if 'aggregate' in locs:
+                self.unordered_aggregate_func_names.add(func_name)
                 [self.unordered_window_func_names.add(dep) for dep in deps]
         
         def process_deps(func_name):
@@ -240,6 +244,29 @@ class ParamapAnalysis(ParamapAnalysisBase):
             for i, function in enumerate(self.ordered_funcs):
                 if self.ordered_func_names[i] in self.unordered_full_seg_func_names:
                     function(img_window, phantom_window, window, self.config, self.image_data, **self.analysis_kwargs)
+
+    def compute_aggregate_vals(self):
+        """Run aggregate functions once every window has been fully processed, giving them
+        read access to every window's results (unlike window/full_segmentation functions,
+        which only ever see their own window). Writes results onto self.aggregate_results.
+
+        Runs after the per-window pass (see compute_paramaps()), in the same dependency
+        order computed by determine_func_order(), so an aggregate function's declared
+        @dependencies(...) are guaranteed to be populated on every window by the time it runs.
+
+        analysis_kwargs['aggregate_evict'] (optional, config-provided list of attribute
+        names) is deleted from every window's .results afterward, to reclaim memory for
+        bulky per-window intermediates (e.g. full frequency-curve arrays) that only existed
+        to feed an aggregation and aren't needed by visualization/export.
+        """
+        for i, function in enumerate(self.ordered_funcs):
+            if self.ordered_func_names[i] in self.unordered_aggregate_func_names:
+                function(self.windows, self.aggregate_results, self.config, self.image_data, **self.analysis_kwargs)
+
+        for attr in self.analysis_kwargs.get('aggregate_evict', []):
+            for window in self.windows:
+                if hasattr(window.results, attr):
+                    delattr(window.results, attr)
 
     def compute_single_window(self):
         """Define a single window that contains all parametric map windows for analysis, capturing the entire segmentation.
