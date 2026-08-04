@@ -153,7 +153,15 @@ def core_pipeline(args) -> int:
         for kwarg in analysis_kwargs:
             if kwarg not in args.analysis_kwargs:
                 raise ValueError(f"analysis_kwargs: Missing required keyword argument '{kwarg}' for function '{name}' in {args.analysis_type} analysis type.")
-            
+
+    # A generic aggregate function (e.g. window_mean/window_median) points at the window
+    # plugin it aggregates via analysis_kwargs['source_func'] rather than a static
+    # @dependencies(...) declaration; validate that plugin is actually part of this run.
+    if 'source_func' in args.analysis_kwargs:
+        source_func = args.analysis_kwargs['source_func']
+        assert source_func in args.analysis_funcs, \
+            f"analysis_kwargs['source_func'] = '{source_func}' must also be listed in analysis_funcs."
+
     # Check visualization setup
     if args.visualization_funcs is None:
         args.visualization_funcs = []
