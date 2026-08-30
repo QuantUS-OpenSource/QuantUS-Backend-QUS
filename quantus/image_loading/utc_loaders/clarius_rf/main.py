@@ -17,8 +17,8 @@ class EntryClass(UltrasoundRfImage):
     """
     extensions = [".raw", ".tar"]  # Clarius RF files can be raw or tar compressed
     spatial_dims = 2  # Clarius data can be 3D but we extract 2D frames
-    gui_kwargs = ['use_tgc']; cli_kwargs = ['visualize']
-    default_gui_kwarg_vals = ['True']  # str because parsed from GUI
+    gui_kwargs = ['use_tgc', 'start_depth_factor']; cli_kwargs = ['visualize']
+    default_gui_kwarg_vals = ['True', 'None']  # str because parsed from GUI
     default_cli_kwarg_vals = ['False']  # str because parsed from CLI
 
     def __init__(self, scan_path: str, phantom_path: str, **kwargs):
@@ -30,11 +30,13 @@ class EntryClass(UltrasoundRfImage):
             **kwargs:
                 visualize (bool): Whether to visualize the data in the terminal after extraction.
                 use_tgc (bool): Whether to use TGC data in processing.
+                start_depth_factor (float): Factor to multiply endDepth by for startDepth. Value of None uses default calculation.
         """
         super().__init__(scan_path, phantom_path)
 
         visualize = kwargs.get('visualize', False)
         use_tgc = kwargs.get('use_tgc', True)
+        start_depth_factor = kwargs.get('start_depth_factor', None)
 
         # Validate file extensions
         scan_path = Path(scan_path)
@@ -52,6 +54,7 @@ class EntryClass(UltrasoundRfImage):
             os.path.dirname(phantom_raw_dir),
             visualize=visualize,
             use_tgc=use_tgc,
+            start_depth_factor=start_depth_factor
         )
         
         # Set the required attributes
