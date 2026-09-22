@@ -558,7 +558,7 @@ class ClariusParser():
     ###################################################################################
     
     def __init__(self, rf_raw_path: str, env_tgc_yml_path: str, rf_yml_path: str, 
-                visualize: bool=False, use_tgc: bool=False):
+                visualize: bool=False, use_tgc: bool=False, start_depth_factor: float | None = None):
         # Make sure all inputted files exist
         assert Path(rf_raw_path).exists() and Path(rf_yml_path).exists(), \
                 "One or more input files do not exist. Please check the paths."
@@ -568,6 +568,7 @@ class ClariusParser():
         self.rf_raw_path = rf_raw_path
         self.visualize = visualize
         self.use_tgc = use_tgc
+        self.start_depth_factor = start_depth_factor
 
         # yml files path
         assert rf_yml_path.endswith("_rf.yml"), "The rf_yml_path must end with .yml or .yaml"
@@ -977,8 +978,17 @@ class ClariusParser():
         except KeyError:
             self.scan_converted = False
             
-        self.clarius_info_struct.endDepth1 = self.extract_first_num(self.rf_yml_obj.rf_imaging_depth) / 100 # [m]
-        self.clarius_info_struct.startDepth1 = self.clarius_info_struct.endDepth1 / 4 # [m]
+        self.clarius_info_struct.endDepth1 = self.extract_first_num(self.rf_yml_obj.rf_imaging_depth) / 1000 # [m]
+        if self.start_depth_factor is None:
+            if self.use_tgc:
+                tgc_envelope_3d = get_signal_envelope_xd(self.rf_raw_data_3d, hilbert_transform_axis=self.hilbert_transform_axis)
+                bmode = 20 * np.log10(tgc_envelope_3d)
+            else:
+                bmode = 20 * np.log10(self.no_tgc_envelope_3d)
+            bmode = np.transpose(bmode, (1, 0, 2))
+            self.clarius_info_struct.startDepth1 = (1 - (self.rf_yml_obj.rf_size['samples per line'] / bmode.shape[0])) * self.clarius_info_struct.endDepth1 # [m]
+        else:
+            self.clarius_info_struct.startDepth1 = self.clarius_info_struct.endDepth1 * self.start_depth_factor
         self.clarius_info_struct.samplingFrequency = self.extract_first_num(self.rf_yml_obj.rf_sampling_rate) * 1e6 # [Hz]
         self.clarius_info_struct.tilt1 = 0
         self.clarius_info_struct.samplesPerLine = self.rf_yml_obj.rf_size['samples per line']
@@ -1026,20 +1036,20 @@ class ClariusParser():
                                              self.clarius_info_struct.endDepth1,
                                              desiredHeight=500)[0].scArr for i in tqdm(range(rf_atgc.shape[2]))])
             
-            self.clarius_info_struct.yResRF =  self.clarius_info_struct.endDepth1*1000 / scBmodeStruct.scArr.shape[0]
+            self.clarius_info_struct.yResRF = self.clarius_info_struct.endDepth1*1000 / self.clarius_info_struct.samplesPerLine
             self.clarius_info_struct.xResRF = self.clarius_info_struct.yResRF * (scBmodeStruct.scArr.shape[0]/scBmodeStruct.scArr.shape[1]) # placeholder
             self.clarius_info_struct.axialRes = hCm1*10 / scBmodeStruct.scArr.shape[0]
             self.clarius_info_struct.lateralRes = wCm1*10 / scBmodeStruct.scArr.shape[1]
             self.clarius_info_struct.depth = hCm1*10 #mm
             self.clarius_info_struct.width = wCm1*10 #mm
-            
+        
             self.clarius_data_struct.scBmodeStruct = scBmodeStruct
             self.clarius_data_struct.scBmode = scBmodes
             self.clarius_data_struct.bMode = np.transpose(bmode, (2, 0, 1))
             self.clarius_data_struct.rf = np.transpose(rf_atgc, (2, 0, 1))
             
         else:
-            self.clarius_info_struct.yResRF = self.clarius_info_struct.endDepth1*1000 / bmode.shape[0] # mm/pixel
+            self.clarius_info_struct.yResRF = self.clarius_info_struct.endDepth1*1000 / self.clarius_info_struct.samplesPerLine
             self.clarius_info_struct.xResRF = self.clarius_info_struct.yResRF * (bmode.shape[0]/bmode.shape[1]) # placeholder
             self.clarius_info_struct.axialRes = self.clarius_info_struct.yResRF #mm
             self.clarius_info_struct.lateralRes = self.clarius_info_struct.xResRF #mm
@@ -1441,10 +1451,11 @@ def clariusRfParser(imgFilename: str,
                     phantomTgcFilename: str,
                     phantomInfoFilename: str,
                     visualize: bool = False,
-                    use_tgc: bool = False) -> tuple:
+                    use_tgc: bool = False,
+                    start_depth_factor: float | None = None) -> tuple:
 
-    main_sample_obj    = ClariusParser(imgFilename, imgTgcFilename, infoFilename, visualize=visualize, use_tgc=use_tgc)
-    phantom_sample_obj = ClariusParser(phantomFilename, phantomTgcFilename, phantomInfoFilename, visualize=visualize, use_tgc=use_tgc)
+    main_sample_obj    = ClariusParser(imgFilename, imgTgcFilename, infoFilename, visualize=visualize, use_tgc=use_tgc, start_depth_factor=start_depth_factor)
+    phantom_sample_obj = ClariusParser(phantomFilename, phantomTgcFilename, phantomInfoFilename, visualize=visualize, use_tgc=use_tgc, start_depth_factor=start_depth_factor)
 
     imgData       = main_sample_obj.clarius_data_struct
     imgInfo       = main_sample_obj.clarius_info_struct
@@ -1458,7 +1469,7 @@ def clariusRfParser(imgFilename: str,
 
 ###################################################################################
 
-def clariusRfParserWrapper(img_folder: str, ref_folder: str, visualize: bool = False, use_tgc: bool = False) \
+def clariusRfParserWrapper(img_folder: str, ref_folder: str, visualize: bool = False, use_tgc: bool = False, start_depth_factor: float | None = None) \
     -> Tuple[DataOutputStruct, InfoStruct, DataOutputStruct, InfoStruct]:
     """Parse Clarius RF data. Entry-point of entire parser.
 
@@ -1514,7 +1525,8 @@ def clariusRfParserWrapper(img_folder: str, ref_folder: str, visualize: bool = F
         phantomTgcFilename=ref_tgc,
         phantomInfoFilename=ref_info,
         visualize=visualize,
-        use_tgc=use_tgc
+        use_tgc=use_tgc,
+        start_depth_factor=start_depth_factor
     ) 
     
 ###################################################################################
