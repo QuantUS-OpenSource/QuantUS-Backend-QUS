@@ -4,6 +4,10 @@ from typing import Tuple
 
 from argparse import ArgumentParser
 
+from quantus.plugin_loader import load_user_plugins
+
+import sys as _sys
+
 def data_export_args(parser: ArgumentParser):
     parser.add_argument('data_export_type', type=str, default='',
                         help='Data export type to use. Available data export types: ' + ', '.join(get_data_export_types()[0].keys()))
@@ -21,15 +25,13 @@ def get_data_export_types() -> Tuple[dict, dict]:
         dict: Dictionary of visualization functions for each type.
     """
     types = {}
-    current_dir = Path(__file__).parent
+    current_dir = (Path(_sys._MEIPASS) / 'quantus' / 'data_export') if getattr(_sys, 'frozen', False) else Path(__file__).parent
     for folder in current_dir.iterdir():
         # Check if the item is a directory and not a hidden directory
         if folder.is_dir() and not folder.name.startswith("_"):
             try:
                 # Attempt to import the module
-                module = importlib.import_module(
-                    f".{folder.name}.framework", package=__package__
-                )
+                module = importlib.import_module(f".{folder.name}.framework", package=__package__)
                 entry_class = getattr(module, f"{folder.name.upper()}Export", None)
                 if entry_class:
                     types[folder.name] = entry_class
@@ -40,8 +42,10 @@ def get_data_export_types() -> Tuple[dict, dict]:
 
     functions = {}
     for type_name, _ in types.items():
-        methods_path = Path(__file__).parent / type_name / "export_funcs"
+        methods_path = (Path(_sys._MEIPASS) / 'quantus' / 'data_export' / type_name / 'export_funcs') if getattr(_sys, 'frozen', False) else Path(__file__).parent / type_name / "export_funcs"
         for file in methods_path.iterdir():
+            if file.suffix != '.py' or file.stem.startswith('_'): 
+                continue
             try:
                 module = importlib.import_module(f'.{type_name}.export_funcs.{file.stem}', package=__package__)
                 for name, obj in vars(module).items():
@@ -53,7 +57,19 @@ def get_data_export_types() -> Tuple[dict, dict]:
                     except (TypeError, KeyError):
                         pass
             except ModuleNotFoundError:
-                # Handle the case where the functions module cannot be found
-                functions[type_name] = {}
+                pass 
+
+    for _module in load_user_plugins("data_export"):
+            # New analysis types
+        if hasattr(_module, "EXPORT_TYPES"):
+            for _type_name, _type_class in _module.EXPORT_TYPES.items():
+                types[_type_name] = _type_class
+
+        # New analysis functions for an existing or new type
+        if hasattr(_module, "EXPORT_FUNCTIONS"):
+            for _type_name, _funcs in _module.EXPORT_FUNCTIONS.items():
+                if _type_name not in functions:
+                    functions[_type_name] = {}
+                functions[_type_name].update(_funcs)
             
     return types, functions

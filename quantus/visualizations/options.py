@@ -4,6 +4,10 @@ from typing import List, Tuple
 
 from argparse import ArgumentParser
 
+from quantus.plugin_loader import load_user_plugins
+
+import sys as _sys
+
 def visualization_args(parser: ArgumentParser):
     parser.add_argument('visualization_type', type=str, default='paramap_drawing',
                         help='Visualization type to use. Available visualization types: ' + ', '.join(get_visualization_types().keys()))
@@ -22,15 +26,13 @@ def get_visualization_types() -> Tuple[dict, dict]:
         dict: Dictionary of visualization functions for each type.
     """
     types = {}
-    current_dir = Path(__file__).parent
+    current_dir = (Path(_sys._MEIPASS) / 'quantus' / 'visualizations') if getattr(_sys, 'frozen', False) else Path(__file__).parent
     for folder in current_dir.iterdir():
         # Check if the item is a directory and not a hidden directory
         if folder.is_dir() and not folder.name.startswith("_"):
             try:
                 # Attempt to import the module
-                module = importlib.import_module(
-                    f".{folder.name}.framework", package=__package__
-                )
+                module = importlib.import_module(f".{folder.name}.framework", package=__package__)
                 entry_class = getattr(module, f"{folder.name.capitalize()}Visualizations", None)
                 if entry_class:
                     types[folder.name] = entry_class
@@ -41,8 +43,10 @@ def get_visualization_types() -> Tuple[dict, dict]:
             
     functions = {}
     for type_name, type_class in types.items():
-        methods_path = Path(__file__).parent / type_name / "visualization_funcs"
+        methods_path = (Path(_sys._MEIPASS) / 'quantus' / 'visualizations' / type_name / 'visualization_funcs') if getattr(_sys, 'frozen', False) else Path(__file__).parent / type_name / "visualization_funcs"
         for file in methods_path.iterdir():
+            if file.suffix != '.py' or file.stem.startswith('_'):
+                continue
             try:
                 module = importlib.import_module(f'.{type_name}.visualization_funcs.{file.stem}', package=__package__)
                 for name, obj in vars(module).items():
@@ -56,9 +60,20 @@ def get_visualization_types() -> Tuple[dict, dict]:
             except ModuleNotFoundError as e:
                 # Handle the case where the functions module cannot be found
                 print(f"Module quantus.visualizations.{type_name}.functions could not be found: {e}")
-                functions[type_name] = {}
+                pass
             
     functions['paramap']['paramaps'] = None # Built-in function
+
+    for _module in load_user_plugins("visualizations"):
+        if hasattr(_module, "VIZ_TYPES"):
+            for _type_name, _type_class in _module.VIZ_TYPES.items():
+                types[_type_name] = _type_class
+
+        if hasattr(_module, "VIZ_FUNCTIONS"):
+            for _type_name, _funcs in _module.VIZ_FUNCTIONS.items():
+                if _type_name not in functions:
+                    functions[_type_name] = {}
+                functions[_type_name].update(_funcs)
             
     return types, functions
 
