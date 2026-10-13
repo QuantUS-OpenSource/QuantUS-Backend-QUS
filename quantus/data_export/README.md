@@ -4,6 +4,10 @@ This directory contains plugins for exporting numerical analysis results to vari
 
 Data export plugins take analysis results and format them for external use. Each export function processes the computed analysis parameters and saves them in a structured format for further analysis, reporting, or integration with other tools.
 
+## External / private plugins
+
+Plugins don't have to live in this repo. Set `QUANTUS_PLUGIN_DIR` (defaults to `.quantus/plugins/` at the repo root) to a directory containing a `data_export/` subfolder mirroring this layout (e.g. `$QUANTUS_PLUGIN_DIR/data_export/csv/export_funcs/your_export.py`), and it's picked up alongside the built-ins — no changes to this repo needed. This is how private/proprietary export formats are meant to be distributed (an approved user drops a received plugin file in) and how a future GUI can load plugins dynamically. A plugin here with the same name as a built-in one overrides it (with a warning); everything else stays available.
+
 ## Plugin Architecture
 
 ### Plugin Structure

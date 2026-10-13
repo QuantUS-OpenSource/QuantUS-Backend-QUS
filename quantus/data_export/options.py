@@ -1,8 +1,9 @@
-import importlib
 from pathlib import Path
 from typing import Tuple
 
 from argparse import ArgumentParser
+
+from ..plugin_utils import discover_plugin_classes, discover_marked_functions, get_external_plugin_root
 
 def data_export_args(parser: ArgumentParser):
     parser.add_argument('data_export_type', type=str, default='',
@@ -20,40 +21,20 @@ def get_data_export_types() -> Tuple[dict, dict]:
         dict: Dictionary of visualization types.
         dict: Dictionary of visualization functions for each type.
     """
-    types = {}
     current_dir = Path(__file__).parent
-    for folder in current_dir.iterdir():
-        # Check if the item is a directory and not a hidden directory
-        if folder.is_dir() and not folder.name.startswith("_"):
-            try:
-                # Attempt to import the module
-                module = importlib.import_module(
-                    f".{folder.name}.framework", package=__package__
-                )
-                entry_class = getattr(module, f"{folder.name.upper()}Export", None)
-                if entry_class:
-                    types[folder.name] = entry_class
-            except ModuleNotFoundError as e:
-                # Handle the case where the module cannot be found
-                print(f"Module not found for {folder.name}: {e}")
-                pass
+    types = discover_plugin_classes(
+        current_dir, __package__, "framework", lambda name: f"{name.upper()}Export",
+        external_stage="data_export",
+    )
 
+    external_root = get_external_plugin_root()
     functions = {}
-    for type_name, _ in types.items():
-        methods_path = Path(__file__).parent / type_name / "export_funcs"
-        for file in methods_path.iterdir():
-            try:
-                module = importlib.import_module(f'.{type_name}.export_funcs.{file.stem}', package=__package__)
-                for name, obj in vars(module).items():
-                    try:
-                        if callable(obj) and hasattr(obj, "required_kwargs"):
-                            if not isinstance(obj, type):
-                                functions[type_name] = functions.get(type_name, {})
-                                functions[type_name][name] = obj
-                    except (TypeError, KeyError):
-                        pass
-            except ModuleNotFoundError:
-                # Handle the case where the functions module cannot be found
-                functions[type_name] = {}
-            
+    for type_name in types:
+        methods_path = current_dir / type_name / "export_funcs"
+        external_methods_path = external_root / "data_export" / type_name / "export_funcs" if external_root else None
+        functions[type_name] = discover_marked_functions(
+            __package__, f".{type_name}.export_funcs", methods_path, "required_kwargs",
+            external_funcs_dir=external_methods_path,
+        )
+
     return types, functions

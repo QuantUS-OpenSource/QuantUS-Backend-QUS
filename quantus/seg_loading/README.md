@@ -4,6 +4,10 @@ Segmentation loading plugins load binary masks to specify where in the loaded sc
 
 New plugins can be added to the [quantus/seg_loading/seg_loaders](seg_loaders) folder as a new .py file containing a function, and will extend the capabilities of QuantUS without any additional programming required.
 
+## External / private plugins
+
+Plugins don't have to live in this repo. Set `QUANTUS_PLUGIN_DIR` (defaults to `.quantus/plugins/` at the repo root) to a directory containing a `seg_loading/` subfolder with plugin files in the same form described below (e.g. `$QUANTUS_PLUGIN_DIR/seg_loading/your_loader.py`), and it's picked up alongside the built-ins — no changes to this repo needed. This is how private/proprietary loaders are meant to be distributed (an approved user drops a received plugin file in) and how a future GUI can load plugins dynamically. A plugin here with the same name as a built-in one overrides it (with a warning); everything else stays available.
+
 ## Plugin Implementation
 
 ### Core data class

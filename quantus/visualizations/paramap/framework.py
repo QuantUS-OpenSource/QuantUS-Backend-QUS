@@ -12,6 +12,7 @@ from ...data_objs.visualizations import ParamapDrawingBase
 from ...data_objs.analysis import ParamapAnalysisBase
 from ...data_objs.image import UltrasoundRfImage
 from ...data_objs.seg import BmodeSeg
+from ...plugin_utils import get_quantus_home_dir
 from ..options import get_visualization_types
 
 class_name = "ParamapAnalysis"
@@ -26,13 +27,14 @@ class ParamapVisualizations(ParamapDrawingBase):
         assert isinstance(analysis_obj, ParamapAnalysisBase), "analysis_obj must be a ParamapAnalysisBase child class"
         super().__init__(analysis_obj)
 
-        # Default to project-level folder 'Visualization_Results' unless overridden.
-        # If a relative path is provided, resolve it against the repository root
-        # so outputs land consistently in the project folder, regardless of CWD.
+        # Default to .quantus/visualization_results/ at the repo root unless overridden,
+        # keeping outputs out of the repo's tracked files by default (see get_quantus_home_dir).
+        # If a relative path is provided instead, resolve it against the repository
+        # root so outputs land consistently in the project folder, regardless of CWD.
         from pathlib import Path as _P
         repo_root = _P(__file__).resolve().parents[2]  # .../quantus
         repo_root = repo_root.parent                    # repository root
-        default_dir = repo_root / "Visualization_Results"
+        default_dir = get_quantus_home_dir() / "visualization_results"
         provided = kwargs.get('paramap_folder_path', str(default_dir))
         provided_path = _P(provided)
         if not provided_path.is_absolute():
