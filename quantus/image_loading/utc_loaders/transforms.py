@@ -1,7 +1,6 @@
 import math
 import numpy as np
-from numpy.matlib import repmat
-import scipy.signal as ssg    
+import scipy.signal as ssg
 from scipy.interpolate import interpn
 from typing import Tuple
 from dataclasses import dataclass
@@ -88,8 +87,8 @@ def scanConvert(inIm: np.ndarray, width: float, tilt: float, startDepth: float, 
 
     for i in range(backgr.shape[0]):
         scMap[backgr[i,0],backgr[i,1]] = background
-    inIm_indx = repmat(np.arange(0, outIm.shape[1]), int(outIm.shape[0]), 1) # <-- maps (y,x) in Iin to indt in Iin
-    inIm_indy = np.transpose(repmat(np.arange(0, outIm.shape[0]), int(outIm.shape[1]), 1)) # <-- maps (y,x) in Iout to indr in Iin
+    inIm_indx = np.tile(np.arange(0, outIm.shape[1]), (int(outIm.shape[0]), 1)) # <-- maps (y,x) in Iin to indt in Iin
+    inIm_indy = np.transpose(np.tile(np.arange(0, outIm.shape[0]), (int(outIm.shape[1]), 1))) # <-- maps (y,x) in Iout to indr in Iin
         
     outIm = np.append(np.transpose(outIm), background)
     inIm_indy = np.append(np.transpose(inIm_indy), background)

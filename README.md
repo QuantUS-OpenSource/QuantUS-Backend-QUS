@@ -35,14 +35,12 @@ cd QuantUS-Backend-QUS
 
 ```bash
 $PYTHON310 -m pip install virtualenv
-$PYTOHN310 -m virtualenv .venv
+$PYTHON310 -m virtualenv .venv
 source .venv/bin/activate                           # Unix
 .venv\Scripts\activate                              # Windows (cmd)
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 pip install pyradiomics==3.0.1 --no-build-isolation
-./saveQt.sh                                         # Unix
-.\saveQt.sh                                         # Windows (cmd)
 ```
 
 ## Usage
@@ -57,7 +55,7 @@ This entrypoint can be accessed using
 
 ```bash
 # Using .venv virtual environment
-quantus $CONFIGPATH
+python -m quantus.full_workflow $CONFIGPATH
 ```
 
 2. **Scripting**
@@ -82,7 +80,7 @@ For projects starting with just RF data and no segmentations, the recommended us
 
 ## Architecture overview
 
-QuantUS follows a modular plugin-based architecture with clear separation of concerns to support this workflow. The remainder of the documentation in this repository is designed for develoeprs who want to understand the codebase structure and contribute new functionality.
+QuantUS follows a modular plugin-based architecture with clear separation of concerns to support this workflow. The remainder of the documentation in this repository is designed for developers who want to understand the codebase structure and contribute new functionality. See [docs/architecture.md](docs/architecture.md) for the full plugin-discovery pattern and core data objects, and [AGENTS.md](AGENTS.md) for the end-to-end workflow for adding a new plugin.
 
 ```
 QuantUS-Plugins/
