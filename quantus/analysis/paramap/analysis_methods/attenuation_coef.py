@@ -7,7 +7,7 @@ from ....data_objs.analysis import Window
 from ....data_objs.image import UltrasoundRfImage
 
 @supported_spatial_dims(2, 3)
-@output_vars("att_coefs", "att_subf")
+@output_vars("att_coefs", "att_subf", "ac_slope", "ac_intercept")
 @required_kwargs("ref_atten", "ref_atten_exp", "ref_atten_offset", "n_secs", "sec_overlap", "n_fft")
 @default_kwarg_vals(0.7, 1., 0., 5, 0.50, 8192)
 def attenuation_coef(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
@@ -86,3 +86,12 @@ def attenuation_coef(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
 
     window.results.att_coefs = att   # db/cm
     window.results.att_subf = f*1e-6 # MHz
+
+    # Scalar reduction for the parametric map: the paramap visualizer only colors scalar
+    # per-window results, not arrays, so att_coefs/att_subf alone never produce a map (see
+    # ParamapVisualizations.export_visualizations, which skips array-valued results). The
+    # slope of attenuation vs. frequency is the standard clinical "attenuation coefficient
+    # slope" (ACS) biomarker, so it doubles as a meaningful single-valued map.
+    ac_slope, ac_intercept = np.polyfit(window.results.att_subf, att, 1)
+    window.results.ac_slope = ac_slope          # dB/cm/MHz
+    window.results.ac_intercept = ac_intercept  # dB/cm

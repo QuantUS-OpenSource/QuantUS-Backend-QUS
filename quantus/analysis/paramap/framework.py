@@ -3,6 +3,7 @@ from typing import List
 
 from ...data_objs import UltrasoundRfImage, BmodeSeg, RfAnalysisConfig, ParamapAnalysisBase
 from ...data_objs.analysis import Window
+from ...data_objs.analysis_config import WIN_SIZE_UNITS_MM, WIN_SIZE_UNITS_WAVELENGTH, WIN_SIZE_UNITS_A_LINES
 from ..options import get_analysis_types
 
 class_name = "ParamapAnalysis"
@@ -136,21 +137,21 @@ class ParamapAnalysis(ParamapAnalysisBase):
                         
     def get_seg_window_lens(self):
         wavelength = self.config.speed_of_sound / self.config.center_frequency * 1000 # mm
-        if self.config.ax_win_size_units == 1: # mm
+        if self.config.ax_win_size_units == WIN_SIZE_UNITS_MM:
             self.ax_win_len_pixels = round(self.config.ax_win_size / self.image_data.axial_res)
-        elif self.config.ax_win_size_units == 2: # wavelength
-            self.ax_win_len_pixels = round((self.config.ax_win_size_units * wavelength) / self.image_data.axial_res)
+        elif self.config.ax_win_size_units == WIN_SIZE_UNITS_WAVELENGTH:
+            self.ax_win_len_pixels = round((self.config.ax_win_size * wavelength) / self.image_data.axial_res)
         else:
-            raise ValueError("Axial window size units not recognized")
-        
-        if self.config.lat_win_size_units == 1: # mm
+            raise ValueError(f"Axial window size units not recognized: '{self.config.ax_win_size_units}'")
+
+        if self.config.lat_win_size_units == WIN_SIZE_UNITS_MM:
             self.lat_win_len_pixels = round(self.config.lat_win_size / self.image_data.lateral_res)
-        elif self.config.lat_win_size_units == 2: # wavelength
-            self.lat_win_len_pixels = round((self.config.lat_win_size_units * wavelength) / self.image_data.lateral_res)
-        elif self.config.lat_win_size_units == 3: # pix
+        elif self.config.lat_win_size_units == WIN_SIZE_UNITS_WAVELENGTH:
+            self.lat_win_len_pixels = round((self.config.lat_win_size * wavelength) / self.image_data.lateral_res)
+        elif self.config.lat_win_size_units == WIN_SIZE_UNITS_A_LINES:
             self.lat_win_len_pixels = round(self.config.lat_win_size)
         else:
-            raise ValueError("Lateral window size units not recognized")
+            raise ValueError(f"Lateral window size units not recognized: '{self.config.lat_win_size_units}'")
         
     def generate_seg_windows(self):
         """Generate windows for parametric map analysis based on user-defined segmentation.

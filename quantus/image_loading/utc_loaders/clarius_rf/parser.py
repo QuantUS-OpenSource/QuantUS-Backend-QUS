@@ -1021,19 +1021,23 @@ class ClariusParser():
         bmode -= np.amin(bmode); bmode *= 255 / np.amax(bmode)
         
         if self.scan_converted:
-            
+            # Define the apex to face distance based on the probe radius    
+            apex_to_face = self.rf_yml_obj.rf_probe["radius"] / 1000 # [m]
+            sc_start_depth = self.clarius_info_struct.startDepth1 + apex_to_face
+            sc_stop_depth = self.clarius_info_struct.endDepth1 + apex_to_face
+
             scBmodeStruct, hCm1, wCm1 = scanConvert(bmode[:,:,0],
                                                     self.clarius_info_struct.width1,
                                                     self.clarius_info_struct.tilt1,
-                                                    self.clarius_info_struct.startDepth1, 
-                                                    self.clarius_info_struct.endDepth1,
+                                                    sc_start_depth,
+                                                    sc_stop_depth,
                                                     desiredHeight=500)
-            
+
             scBmodes = np.array([scanConvert(bmode[:,:,i],
                                              self.clarius_info_struct.width1,
                                              self.clarius_info_struct.tilt1,
-                                             self.clarius_info_struct.startDepth1, 
-                                             self.clarius_info_struct.endDepth1,
+                                             sc_start_depth,
+                                             sc_stop_depth,
                                              desiredHeight=500)[0].scArr for i in tqdm(range(rf_atgc.shape[2]))])
             
             self.clarius_info_struct.yResRF = self.clarius_info_struct.endDepth1*1000 / self.clarius_info_struct.samplesPerLine
@@ -1042,7 +1046,18 @@ class ClariusParser():
             self.clarius_info_struct.lateralRes = wCm1*10 / scBmodeStruct.scArr.shape[1]
             self.clarius_info_struct.depth = hCm1*10 #mm
             self.clarius_info_struct.width = wCm1*10 #mm
-        
+
+            # yResRF/xResRF/axialRes/lateralRes above are already computed from the pure
+            # tissue-depth values, so it's now safe to fold the apex offset into
+            # startDepth1/endDepth1 themselves. main.py reads these two fields next for
+            # image_data.start_depth/end_depth, which ParamapDrawingBase (visualizations.py)
+            # re-derives its window-overlay scan conversion from via its own scanConvert()
+            # call -- that call needs the SAME apex-adjusted depths used above for
+            # scBmodeStruct/scBmodes, or the window overlay drifts from the displayed
+            # B-mode/ROI geometry (windows rendered too close to the apex).
+            self.clarius_info_struct.startDepth1 = sc_start_depth
+            self.clarius_info_struct.endDepth1 = sc_stop_depth
+
             self.clarius_data_struct.scBmodeStruct = scBmodeStruct
             self.clarius_data_struct.scBmode = scBmodes
             self.clarius_data_struct.bMode = np.transpose(bmode, (2, 0, 1))

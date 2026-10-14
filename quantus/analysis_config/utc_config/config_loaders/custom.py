@@ -1,17 +1,22 @@
 from ..decorators import *
-from ....data_objs.analysis_config import RfAnalysisConfig
+from ....data_objs.analysis_config import (
+    RfAnalysisConfig, WIN_SIZE_UNITS_MM, WIN_SIZE_UNITS_WAVELENGTH, WIN_SIZE_UNITS_A_LINES,
+)
 
 @extensions()
 def custom(analysis_path: str, **kwargs) -> RfAnalysisConfig:
     """Function to load RF analysis configuration data from a Python dict.
-    
+
     Kwargs:
         transducer_freq_band (list): [min, max] frequency band of the transducer (Hz).
         analysis_freq_band (list): [lower, upper] frequency band for analysis (Hz).
         center_frequency (float): Center frequency of the transducer (Hz).
         sampling_frequency (float): Sampling frequency (Hz).
-        ax_win_size (float): Axial length per window (mm).
-        lat_win_size (float): Lateral length per window (mm).
+        ax_win_size (float): Axial length per window, in ax_win_size_units.
+        lat_win_size (float): Lateral length per window, in lat_win_size_units.
+        ax_win_size_units (str): WIN_SIZE_UNITS_MM ("mm") or WIN_SIZE_UNITS_WAVELENGTH ("number of wavelength").
+        lat_win_size_units (str): WIN_SIZE_UNITS_MM ("mm"), WIN_SIZE_UNITS_WAVELENGTH ("number of wavelength"),
+                                   or WIN_SIZE_UNITS_A_LINES ("A-Lines").
         window_thresh (float): Percentage of window area required to be considered in ROI.
         axial_overlap (float): Percentage of window overlap in axial direction.
         lateral_overlap (float): Percentage of window overlap in lateral direction.
@@ -35,8 +40,10 @@ def custom(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         assert type(kwargs["axial_overlap"]) is float, "axial_overlap must be a float"
         assert type(kwargs["lateral_overlap"]) is float, "lateral_overlap must be a float"
         assert type(kwargs['speed_of_sound']) is float, 'speed_of_sound must be a float'
-        assert type(kwargs['ax_win_size_units']) is int, 'ax_win_size_units must be a int'
-        assert type(kwargs['lat_win_size_units']) is int, 'lat_win_size_units must be a int'        
+        assert kwargs['ax_win_size_units'] in (WIN_SIZE_UNITS_MM, WIN_SIZE_UNITS_WAVELENGTH), \
+            f"ax_win_size_units must be one of {(WIN_SIZE_UNITS_MM, WIN_SIZE_UNITS_WAVELENGTH)}"
+        assert kwargs['lat_win_size_units'] in (WIN_SIZE_UNITS_MM, WIN_SIZE_UNITS_WAVELENGTH, WIN_SIZE_UNITS_A_LINES), \
+            f"lat_win_size_units must be one of {(WIN_SIZE_UNITS_MM, WIN_SIZE_UNITS_WAVELENGTH, WIN_SIZE_UNITS_A_LINES)}"
 
         out.transducer_freq_band = kwargs["transducer_freq_band"]
         out.analysis_freq_band = kwargs["analysis_freq_band"]
