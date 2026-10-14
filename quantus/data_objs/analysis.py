@@ -70,7 +70,7 @@ class ParamapAnalysisBase(ABC):
             self.generate_seg_windows()
             assert len(self.windows) > 0, "No windows generated"
 
-        for window in tqdm(self.windows, disable=True):
+        for window in tqdm(self.windows, desc="Computing paramap windows", unit="window"):
             self.compute_window_vals(window)
 
         self.compute_aggregate_vals()

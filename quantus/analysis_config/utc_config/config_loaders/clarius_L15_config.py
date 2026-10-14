@@ -1,5 +1,5 @@
 from ..decorators import *
-from ....data_objs.analysis_config import RfAnalysisConfig
+from ....data_objs.analysis_config import RfAnalysisConfig, WIN_SIZE_UNITS_MM
 
 @extensions()
 def clarius_L15_config(analysis_path: str, **kwargs) -> RfAnalysisConfig:
@@ -16,10 +16,13 @@ def clarius_L15_config(analysis_path: str, **kwargs) -> RfAnalysisConfig:
     out.analysis_freq_band = [2e6, 8e6]  # [lower, upper] (Hz), typical analysis range
     out.center_frequency = 5e6  # Hz, typical center frequency for Clarius probes
     out.sampling_frequency = 30e6 # Hz, following Nyquist criterion
+    out.speed_of_sound = 1540.0  # m/s, standard soft-tissue assumption
 
     # Windowing parameters - adjusted for smaller windows due to high frequency
-    out.ax_win_size = 2  # axial length per window (mm) 
+    out.ax_win_size = 2  # axial length per window (mm)
+    out.ax_win_size_units = WIN_SIZE_UNITS_MM
     out.lat_win_size = 4  # lateral length per window (mm)
+    out.lat_win_size_units = WIN_SIZE_UNITS_MM
     out.window_thresh = 0.5  # % of window area required to be considered in ROI
     out.axial_overlap = 0.75  # % of window overlap in axial direction
     out.lateral_overlap = 0.75  # % of window overlap in lateral direction
