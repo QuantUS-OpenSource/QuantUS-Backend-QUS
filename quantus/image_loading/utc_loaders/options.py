@@ -3,6 +3,10 @@ from pathlib import Path
 
 from argparse import ArgumentParser
 
+from quantus.plugin_loader import load_user_plugins
+
+import sys as _sys
+
 def scan_loader_args(parser: ArgumentParser):
     parser.add_argument('scan_path', type=str, help='Path to scan signals')
     parser.add_argument('phantom_path', type=str, help='Path to phantom signals')
@@ -20,7 +24,7 @@ def get_scan_loaders() -> dict:
     Returns:
         dict: Dictionary of scan loaders.
     """
-    current_dir = Path(__file__).parent
+    current_dir = (Path(_sys._MEIPASS) / 'quantus' / 'image_loading' / 'utc_loaders') if getattr(_sys, 'frozen', False) else Path(__file__).parent
     classes = {}
     for folder in current_dir.iterdir():
         # Check if the item is a directory and not a hidden directory
@@ -42,5 +46,18 @@ def get_scan_loaders() -> dict:
                 print(f"Module {folder.name} could not be found: {e}")
                 # Handle the case where the module cannot be found
                 pass
+
+    for _module in load_user_plugins("image_loading"):
+        if hasattr(_module, "SCAN_LOADERS"):
+            for _name, _cls in _module.SCAN_LOADERS.items():
+                classes[_name] = {
+                    'cls':                    _cls,
+                    'file_exts':              _cls.extensions,
+                    'spatial_dims':           _cls.spatial_dims,
+                    'gui_kwargs':             _cls.gui_kwargs,
+                    'cli_kwargs':             _cls.cli_kwargs,
+                    'default_gui_kwarg_vals': _cls.default_gui_kwarg_vals,
+                    'default_cli_kwarg_vals': _cls.default_cli_kwarg_vals,
+                }
     
     return classes
