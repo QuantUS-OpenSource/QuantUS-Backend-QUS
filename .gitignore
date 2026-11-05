@@ -8,3 +8,6 @@ fixed_wheels/
 .DS_Store
 *.so
 /**/*_ui.py
+
+# Confidential vendor loaders: never commit
+quantus/image_loading/utc_loaders/philips_*/
