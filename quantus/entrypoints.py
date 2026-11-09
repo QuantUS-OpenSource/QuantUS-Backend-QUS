@@ -137,6 +137,15 @@ def analysis_step(analysis_type: str, image_data: UltrasoundRfImage, config: RfA
         supported_spatial_dims = all_analysis_funcs[analysis_type][name].supported_spatial_dims if hasattr(all_analysis_funcs[analysis_type][name], 'supported_spatial_dims') else []
         if image_data.spatial_dims not in supported_spatial_dims:
             raise ValueError(f"Function '{name}' does not support {image_data.spatial_dims}D data.\nSupported dimensions: {', '.join(map(str, supported_spatial_dims))}")
+
+    # A generic aggregate function (e.g. window_mean/window_median) points at the window
+    # plugin it aggregates via analysis_kwargs['source_func'] rather than a static
+    # @dependencies(...) declaration; validate that plugin is actually part of this run.
+    if 'source_func' in analysis_kwargs:
+        source_func = analysis_kwargs['source_func']
+        if source_func not in analysis_funcs:
+            raise ValueError(f"analysis_kwargs['source_func'] = '{source_func}' must also be listed in analysis_funcs.")
+
     # Perform analysis
     analyzed_image_data = copy.deepcopy(image_data)
     if analyzed_image_data.spatial_dims < analyzed_image_data.rf_data.ndim:

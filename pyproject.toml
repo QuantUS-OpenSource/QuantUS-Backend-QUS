@@ -82,3 +82,6 @@ quantus_cli = "quantus.cli:main_cli"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["quantus*"]
+
+[tool.setuptools.package-data]
+"quantus.analysis.paramap.analysis_methods.homodyned_k_params" = ["*.mat"]
