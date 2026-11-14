@@ -12,6 +12,7 @@ from ....data_objs.image import UltrasoundRfImage
                  "ref_atten", "ref_atten_exp", "ref_atten_offset",
                  "n_fft", "cirs_path", "cirs_mode")
 @default_kwarg_vals("", 0.7, 1., 0., 0.7, 1., 0., 8192, 25, 1)
+@phantom_window("central_lines")  # reference spectrum averaged over central phantom lines (MATLAB-matched)
 def bsc_transmission_compensation(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
             window: Window, config: RfAnalysisConfig, 
             image_data: UltrasoundRfImage, **kwargs) -> None:

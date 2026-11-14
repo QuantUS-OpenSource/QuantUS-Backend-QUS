@@ -1,10 +1,11 @@
 # Screen 1: Workflow type
-scan_loader: terason_rf
+scan_loader: clarius_rf                     # Built-in loader; private loaders go in QUANTUS_PLUGIN_DIR
 
 # Screen 2: Scan inputs
-scan_path: PATH/TO/SAVED/SCAN.mat
-phantom_path: PATH/TO/SAVED/PHANTOM.mat
+scan_path: PATH/TO/SAVED/SCAN_rf.raw        # clarius_rf accepts .raw or .tar
+phantom_path: PATH/TO/SAVED/PHANTOM_rf.raw
 scan_loader_kwargs:
+  use_tgc: True
 
 # Screen 3: Segmentation (either drawing or saved)
 seg_path: PATH/TO/SAVED/SEG.pkl

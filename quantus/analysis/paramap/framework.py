@@ -5,8 +5,16 @@ from ...data_objs import UltrasoundRfImage, BmodeSeg, RfAnalysisConfig, ParamapA
 from ...data_objs.analysis import Window
 from ...data_objs.analysis_config import WIN_SIZE_UNITS_MM, WIN_SIZE_UNITS_WAVELENGTH, WIN_SIZE_UNITS_A_LINES
 from ..options import get_analysis_types
+from .decorators import PHANTOM_WINDOW_POLICIES
 
 class_name = "ParamapAnalysis"
+
+def get_phantom_window_policy(function) -> str:
+    """The @phantom_window policy a function declared, defaulting to "matched"."""
+    policy = getattr(function, 'phantom_window', ("matched",))
+    if len(policy) != 1 or policy[0] not in PHANTOM_WINDOW_POLICIES:
+        raise ValueError(f"{function.__name__}: @phantom_window must be exactly one of {PHANTOM_WINDOW_POLICIES}, got {policy}")
+    return policy[0]
 
 class ParamapAnalysis(ParamapAnalysisBase):
     """
@@ -72,6 +80,7 @@ class ParamapAnalysis(ParamapAnalysisBase):
                 # Handle function locations
                 locs = function.location if hasattr(function, 'location') else ['window', 'full_segmentation']
                 assign_locs(func_name, deps, locs)
+                get_phantom_window_policy(function)  # fail fast on an invalid @phantom_window
             else:
                 raise ValueError(f"Function '{func_name}' not found!")
             
@@ -219,32 +228,49 @@ class ParamapAnalysis(ParamapAnalysisBase):
             img_window = self.image_data.rf_data[
                 window.ax_min: window.ax_max + 1, window.lat_min: window.lat_max + 1
             ]
-            n_ref_lines = self.image_data.phantom_rf_data.shape[1]
-            lat_start_ix = round(0.25*n_ref_lines)-1
-            lat_end_ix = round(0.75*n_ref_lines)-1
-            phantom_window = self.image_data.phantom_rf_data[
-                window.ax_min: window.ax_max + 1, lat_start_ix: lat_end_ix+1
-            ]
         elif self.image_data.bmode.ndim == 3:
             img_window = self.image_data.rf_data[
-                window.cor_min: window.cor_max + 1, window.lat_min: window.lat_max + 1,
-                window.ax_min: window.ax_max + 1
-            ]
-            phantom_window = self.image_data.phantom_rf_data[
                 window.cor_min: window.cor_max + 1, window.lat_min: window.lat_max + 1,
                 window.ax_min: window.ax_max + 1
             ]
         else:
             raise ValueError("Invalid RF data dimensions. Expected 2D or 3D data.")
 
-        if not full_segmentation:
-            for i, function in enumerate(self.ordered_funcs):
-                if self.ordered_func_names[i] in self.unordered_window_func_names:
-                    function(img_window, phantom_window, window, self.config, self.image_data, **self.analysis_kwargs)
-        else:
-            for i, function in enumerate(self.ordered_funcs):
-                if self.ordered_func_names[i] in self.unordered_full_seg_func_names:
-                    function(img_window, phantom_window, window, self.config, self.image_data, **self.analysis_kwargs)
+        func_names = self.unordered_full_seg_func_names if full_segmentation else self.unordered_window_func_names
+        phantom_windows = {}  # policy -> phantom window, so each slice is built at most once per window
+        for i, function in enumerate(self.ordered_funcs):
+            if self.ordered_func_names[i] in func_names:
+                policy = get_phantom_window_policy(function)
+                if policy not in phantom_windows:
+                    phantom_windows[policy] = self.get_phantom_window(window, policy)
+                function(img_window, phantom_windows[policy], window, self.config, self.image_data, **self.analysis_kwargs)
+
+    def get_phantom_window(self, window: Window, policy: str) -> np.ndarray:
+        """Slice the phantom RF data for one window, according to a function's declared
+        @phantom_window policy (see PHANTOM_WINDOW_POLICIES in decorators.py).
+        """
+        phantom = self.image_data.phantom_rf_data
+        if self.image_data.bmode.ndim == 3:
+            # 3D phantom references are always spatially matched to the scan window.
+            return phantom[
+                window.cor_min: window.cor_max + 1, window.lat_min: window.lat_max + 1,
+                window.ax_min: window.ax_max + 1
+            ]
+
+        if policy == "central_lines":
+            n_ref_lines = phantom.shape[1]
+            lat_start_ix = round(0.25*n_ref_lines)-1
+            lat_end_ix = round(0.75*n_ref_lines)-1
+            return phantom[window.ax_min: window.ax_max + 1, lat_start_ix: lat_end_ix+1]
+
+        # "matched": same lateral width as the scan window. If the phantom has fewer lines than
+        # the window's position needs, shift the window inward so the shapes still agree
+        # (e.g. hscan divides scan by phantom element-wise).
+        n_lines = window.lat_max - window.lat_min + 1
+        if phantom.shape[1] < n_lines:
+            raise ValueError(f"Phantom has {phantom.shape[1]} lines but the analysis window needs {n_lines}.")
+        lat_start = min(window.lat_min, phantom.shape[1] - n_lines)
+        return phantom[window.ax_min: window.ax_max + 1, lat_start: lat_start + n_lines]
 
     def compute_aggregate_vals(self):
         """Run aggregate functions once every window has been fully processed, giving them

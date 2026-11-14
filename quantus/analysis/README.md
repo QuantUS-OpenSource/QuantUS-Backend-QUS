@@ -70,6 +70,9 @@ Metadata can be added to new analysis method functions using decorators defined 
 * `default_kwarg_vals` — default values for kwargs not provided in the analysis configuration.
 * `output_vars` — the variable names written by the function (on `window.results` for window/full_segmentation functions, on `aggregate_results` for aggregate ones with a static/known output name; leave empty for a generic aggregate function with a config-dependent output name).
 * `location` — where in the pipeline the function runs: `'window'`, `'full_segmentation'`, or `'aggregate'` (see above). Defaults to `['window', 'full_segmentation']` if undeclared.
+* `phantom_window` — which slice of the phantom RF data the function receives as `phantom_rf_window` (window/full_segmentation functions only; the framework does the slicing). Exactly one of:
+  * `'matched'` (default if undeclared) — the same axial and lateral bounds as the scan window, so `phantom_rf_window.shape == scan_rf_window.shape`. Use this for anything that combines scan and phantom data element-wise (e.g. `hscan`). If the phantom has fewer lines than the window's lateral position needs, the slice is shifted inward to keep the shapes equal.
+  * `'central_lines'` — the window's axial bounds, but the central 50% of the phantom's lines regardless of the window's lateral position. Only for methods that average the reference spectrum across lines (e.g. `attenuation_coef`, `bsc_transmission_compensation`, matching the MATLAB reference). 2D only; 3D phantom windows are always matched.
 
 ## YAML configs
 
