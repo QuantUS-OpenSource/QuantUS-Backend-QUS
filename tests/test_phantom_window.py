@@ -74,7 +74,8 @@ def test_mixed_policies_hscan_and_attenuation_coef_run_together():
     analysis.compute_paramaps()
     analysis.compute_single_window()
     assert len(analysis.windows) > 0
-    assert np.isfinite(analysis.windows[0].results.ac_slope)
+    for attr in ("att_coef", "ac_slope", "ac_intercept"):
+        assert np.isfinite(getattr(analysis.windows[0].results, attr)), attr
     # hscan is full_segmentation-only, so its output lives on the single ROI-spanning window
     single = analysis.single_window
     assert single.results.hscan_blue_channel.shape == (single.ax_max - single.ax_min + 1,

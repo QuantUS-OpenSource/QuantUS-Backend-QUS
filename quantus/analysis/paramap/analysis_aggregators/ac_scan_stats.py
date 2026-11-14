@@ -20,8 +20,10 @@ def ac_scan_stats(windows: List[Window], aggregate_results: BlankResults, config
     """Scan-level AC: aggregate the per-window attenuation-coefficient-vs-frequency curves
     (from "attenuation_coef") into scan-wide AC estimates: average the curve across every
     window in the ROI first, then reduce it to scalars. Compare with the window-level
-    "ac_slope" (linear-fit ACS) written by "attenuation_coef" itself, which is drawn as a
-    parametric map; the power-law fit has no window-level equivalent. Mirrors the MATLAB reference driver's final
+    "att_coef" and "ac_slope"/"ac_intercept" written by "attenuation_coef" itself, which
+    are drawn as parametric maps. computed_sample_AC equals the mean of the window-level
+    att_coef values (both are linear averages); the power-law fit has no window-level
+    equivalent. Mirrors the MATLAB reference driver's final
     AC step (test_runner_main_loop3.m, Division_AC/Power1_AC columns), which needs every
     window's curve simultaneously and so can't run as a per-window analysis function.
 
@@ -38,7 +40,7 @@ def ac_scan_stats(windows: List[Window], aggregate_results: BlankResults, config
     att_all = np.array([w.results.att_coefs for w in windows]).T
     att_ave = np.mean(att_all, axis=1)
 
-    # Skip 0 Hz in case the analysis band starts there (division by zero)
+    # Skip 0 Hz in case the analysis band starts there, matching attenuation_coef's att_coef
     aggregate_results.computed_sample_AC = np.mean(att_ave[subf > 0] / subf[subf > 0])
 
     popt, _ = curve_fit(power1_model, subf, att_ave)

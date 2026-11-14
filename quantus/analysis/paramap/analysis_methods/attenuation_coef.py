@@ -7,7 +7,7 @@ from ....data_objs.analysis import Window
 from ....data_objs.image import UltrasoundRfImage
 
 @supported_spatial_dims(2, 3)
-@output_vars("att_coefs", "att_subf", "ac_slope", "ac_intercept")
+@output_vars("att_coef", "att_coefs", "att_subf", "ac_slope", "ac_intercept")
 @required_kwargs("ref_atten", "ref_atten_exp", "ref_atten_offset", "n_secs", "sec_overlap", "n_fft")
 @default_kwarg_vals(0.7, 1., 0., 5, 0.50, 8192)
 @phantom_window("central_lines")  # reference spectrum averaged over central phantom lines (MATLAB-matched)
@@ -31,12 +31,13 @@ def attenuation_coef(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
         n_fft (int): Number of frequency samples in the analysis band.
 
     Writes:
+        att_coef: Window-level AC (dB/cm/MHz), mean of att_coefs / att_subf. Scalar,
+            so it's drawn as a parametric map and summarized by descr_vals.
         att_coefs: Window-level AC vs. frequency (dB/cm), one value per att_subf.
         att_subf: Frequencies of att_coefs (MHz).
         ac_slope: Slope of a linear fit of att_coefs vs. att_subf (dB/cm/MHz) -- the
-            attenuation coefficient slope (ACS). Scalar, so it's drawn as a parametric map
-            and summarized by descr_vals.
-        ac_intercept: Intercept of that fit (dB/cm).
+            attenuation coefficient slope (ACS). Scalar, so also drawn as a parametric map.
+        ac_intercept: Intercept of that fit (dB/cm). Scalar, so also drawn as a parametric map.
     """
     if phantom_rf_window.ndim == 3:
         assert scan_rf_window.ndim == 2, "AC only supported for 2D data"
@@ -98,14 +99,18 @@ def attenuation_coef(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
     att_ref = ref_atten*np.pow(f/1e6, ref_atten_exp) + ref_atten_offset
     att = att_temp + att_ref
 
+    subf = f*1e-6 # MHz
     window.results.att_coefs = att   # db/cm
-    window.results.att_subf = f*1e-6 # MHz
-
-    # Scalar reduction for the parametric map: the paramap visualizer only colors scalar
+    window.results.att_subf = subf   # MHz
+    # Scalar reductions for the parametric maps: the paramap visualizer only colors scalar
     # per-window results, not arrays, so att_coefs/att_subf alone never produce a map (see
-    # ParamapVisualizations.export_visualizations, which skips array-valued results). The
-    # slope of attenuation vs. frequency is the standard clinical "attenuation coefficient
-    # slope" (ACS) biomarker, so it doubles as a meaningful single-valued map.
-    ac_slope, ac_intercept = np.polyfit(window.results.att_subf, att, 1)
+    # ParamapVisualizations.export_visualizations, which skips array-valued results).
+
+    # Division-based AC: mean of att/f. Skip 0 Hz in case the analysis band starts there.
+    window.results.att_coef = np.mean(att[subf > 0] / subf[subf > 0]) # dB/cm/MHz
+
+    # The slope of attenuation vs. frequency is the standard clinical "attenuation
+    # coefficient slope" (ACS) biomarker, so it doubles as a meaningful single-valued map.
+    ac_slope, ac_intercept = np.polyfit(subf, att, 1)
     window.results.ac_slope = ac_slope          # dB/cm/MHz
     window.results.ac_intercept = ac_intercept  # dB/cm
