@@ -10,6 +10,7 @@ from ....data_objs.image import UltrasoundRfImage
 @output_vars("att_coef", "att_coefs", "att_subf")
 @required_kwargs("ref_atten", "ref_atten_exp", "ref_atten_offset", "n_secs", "sec_overlap", "n_fft")
 @default_kwarg_vals(0.7, 1., 0., 5, 0.50, 8192)
+@phantom_window("central_lines")  # reference spectrum averaged over central phantom lines (MATLAB-matched)
 def attenuation_coef(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
                     window: Window, config: RfAnalysisConfig,
                     image_data: UltrasoundRfImage, **kwargs) -> None:
