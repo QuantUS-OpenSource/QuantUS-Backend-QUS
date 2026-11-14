@@ -27,4 +27,9 @@ def clarius_C3_config(analysis_path: str, **kwargs) -> RfAnalysisConfig:
     out.cor_win_size = None  # coronal length per window (mm)
     out.coronal_overlap = None  # % of window overlap in coronal direction
 
+    # Window size units
+    out.ax_win_size_units = 1  # 1 = mm, 2 = wavelengths
+    out.lat_win_size_units = 1  # 1 = mm, 2 = wavelengths, 3 = pixels
+    out.speed_of_sound = 1540.  # m/s, converts wavelength units to mm
+
     return out

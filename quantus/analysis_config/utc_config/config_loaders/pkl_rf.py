@@ -23,5 +23,12 @@ def pkl_rf(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         assert config_pkl["Phantom Name"] == Path(kwargs["phantom_path"]).name, 'Phantom file name mismatch'
     
     out = config_pkl["Config"]
-    
+
+    # Unpickling skips __init__, so configs saved before a field was added won't have it.
+    # Fill those in from RfAnalysisConfig's defaults (e.g. window size units default to mm,
+    # which is what every older config used).
+    for attr, default in vars(RfAnalysisConfig()).items():
+        if not hasattr(out, attr):
+            setattr(out, attr, default)
+
     return out

@@ -16,7 +16,10 @@ globally across all six stages.
 See the per-stage README files for the plugin contract each stage expects.
 """
 
+import hashlib
 import importlib
+import importlib.machinery
+import importlib.util
 import os
 import sys
 import warnings
@@ -55,23 +58,30 @@ def get_external_plugin_root() -> Optional[Path]:
 
 
 def import_external_module(directory: Path, module_name: str):
-    """Import `module_name` (which may be dotted, e.g. "my_scanner.main") as if
-    `directory` were on sys.path, so a dropped-in plugin's own relative imports to
-    sibling files (e.g. `from .parser import X` inside a folder-based plugin) resolve
-    correctly, exactly as they would for a built-in plugin.
+    """Import `module_name` (which may be dotted, e.g. "my_scanner.main") from `directory`,
+    so a dropped-in plugin's own relative imports to sibling files (e.g. `from .parser
+    import X` inside a folder-based plugin) resolve correctly, exactly as they would for a
+    built-in plugin.
+
+    `directory` is registered as its own package under a name unique to its absolute path
+    (rather than being added to sys.path), so same-named files in different plugin
+    directories never collide in sys.modules, and a plugin file can't shadow a stdlib or
+    third-party module.
 
     Only imports relative to the plugin's own folder work this way. A relative import
-    reaching further up (e.g. a built-in image loader's `from ....data_objs.image import X`,
-    valid because it's nested several levels inside the real `quantus` package) will raise
-    "attempted relative import beyond top-level package" once external, since externally
-    the plugin is only ever nested one level deep. Plugins meant for the external
-    directory must use absolute imports (`from quantus.data_objs.image import X`) for
-    anything outside their own folder.
+    reaching into the `quantus` package (e.g. a built-in image loader's
+    `from ....data_objs.image import X`, valid because it's nested several levels inside
+    `quantus`) won't resolve once external. Plugins meant for the external directory must
+    use absolute imports (`from quantus.data_objs.image import X`) for anything outside
+    their own folder.
     """
-    directory_str = str(directory)
-    if directory_str not in sys.path:
-        sys.path.insert(0, directory_str)
-    return importlib.import_module(module_name)
+    directory = Path(directory).resolve()
+    package_name = "_quantus_external_" + hashlib.sha1(str(directory).encode()).hexdigest()[:12]
+    if package_name not in sys.modules:
+        spec = importlib.machinery.ModuleSpec(package_name, None, is_package=True)
+        spec.submodule_search_locations = [str(directory)]
+        sys.modules[package_name] = importlib.util.module_from_spec(spec)
+    return importlib.import_module(f"{package_name}.{module_name}")
 
 
 def merge_external_plugins(discovered: dict, external: dict, source: Path) -> dict:

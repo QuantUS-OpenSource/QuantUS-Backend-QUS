@@ -49,7 +49,7 @@ def METHOD_NAME(windows: List[Window], aggregate_results: BlankResults,
                     config: RfAnalysisConfig, image_data: UltrasoundRfImage, **kwargs) -> None:
 ```
 
-Use this when a computation genuinely needs every window's result simultaneously — most commonly "average some per-window curve/value across the whole ROI, then fit/reduce it to one scalar for the scan" (e.g. `analysis_aggregators/ac_scan_stats.py`, which turns per-window `attenuation_coef` output into a single AC estimate; `analysis_aggregators/bsc_scan_stats.py`, which turns per-window `bsc_transmission_compensation` curves into a Lizzi-Feleppa slope/intercept/midband fit; `analysis_aggregators/homodyned_k_scan_stats.py`, which NaN-omitting-means per-window `homodyned_k_params` k/mu estimates — each mirroring a MATLAB reference driver script's own final post-processing step over all ROIs). This is *not* the common case — most QUS methods (Nakagami, H-scan, the NPS-based Lizzi-Feleppa variant, ...) are fully expressible per-window and should stay `'window'`-scoped.
+Use this when a computation genuinely needs every window's result simultaneously — most commonly "average some per-window curve/value across the whole ROI, then fit/reduce it to one scalar for the scan" (e.g. `analysis_aggregators/ac_scan_stats.py`, which turns the per-window AC curves from `attenuation_coef` into scan-level AC estimates (`computed_sample_AC`, `AC_power1_a`/`AC_power1_b` on `aggregate_results`), distinct from the window-level `att_coef` that `attenuation_coef` writes on every window and that's drawn as a parametric map; `analysis_aggregators/bsc_scan_stats.py`, which turns per-window `bsc_transmission_compensation` curves into a Lizzi-Feleppa slope/intercept/midband fit; `analysis_aggregators/homodyned_k_scan_stats.py`, which NaN-omitting-means per-window `homodyned_k_params` k/mu estimates — each mirroring a MATLAB reference driver script's own final post-processing step over all ROIs). This is *not* the common case — most QUS methods (Nakagami, H-scan, the NPS-based Lizzi-Feleppa variant, ...) are fully expressible per-window and should stay `'window'`-scoped.
 
 **Every function declaring `@location("aggregate")` must live in `paramap/analysis_aggregators/` (or `bmode/analysis_aggregators/`)** — a sibling of `analysis_methods/`, not a subfolder nested inside it — e.g. `paramap/analysis_aggregators/ac_scan_stats.py`, not `paramap/analysis_methods/ac_scan_stats.py`. This is a hard requirement, not a style preference: it keeps "a folder under `analysis_methods/` is one plugin" unambiguous (see "Single-file vs. folder plugins" above) rather than a folder sometimes meaning a whole category of plugins, and it makes aggregate functions visually distinct in the directory tree without opening any file. It's discovered exactly the same way as `analysis_methods/` (single `.py` file or a folder with `__init__.py`), at the same nesting depth, so relative imports use the same dot-count as a flat-file plugin in `analysis_methods/` (e.g. `from ..decorators import *` and `from ....data_objs...`). An external/private aggregate plugin mirrors this too: `$QUANTUS_PLUGIN_DIR/analysis/paramap/analysis_aggregators/your_func.py`.
 
@@ -73,4 +73,24 @@ Metadata can be added to new analysis method functions using decorators defined 
 
 ## YAML configs
 
-No schema change is needed to use an aggregate function — its name is just another entry in a config's existing `analysis_funcs` list, and any kwargs it needs (including `source_func`/`source_attr` for a generic aggregator, or `aggregate_evict`) go in the existing `analysis_kwargs` block. See `configs/siemens_rf_att.yaml` for a worked example pairing `attenuation_coef` (window) with `ac_scan_stats` (aggregate).
+No schema change is needed to use an aggregate function — its name is just another entry in a config's existing `analysis_funcs` list, and any kwargs it needs (including `source_func`/`source_attr` for a generic aggregator, or `aggregate_evict`) go in the existing `analysis_kwargs` block. For example, pairing `attenuation_coef` (window) with `ac_scan_stats` (aggregate):
+
+```yaml
+analysis_funcs:
+  - attenuation_coef    # window-level att_coef parametric map
+  - ac_scan_stats       # scan-level computed_sample_AC, AC_power1_a/b
+analysis_kwargs:
+  ref_atten: 0.7
+  ref_atten_exp: 1.0
+  ref_atten_offset: 0.0
+  n_secs: 5
+  sec_overlap: 0.5
+  n_fft: 8192
+  aggregate_evict: [att_coefs]
+data_export_funcs:
+  - descr_vals          # window-level att_coef stats (mean_att_coef, ...)
+  - av_ac               # scan-level computed_sample_AC
+  - ac_pow1             # scan-level AC_power1_a/b
+```
+
+`analysis_funcs` lists exactly the functions to run (plus their dependencies); an empty or missing list runs no analysis functions.

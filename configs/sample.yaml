@@ -16,10 +16,20 @@ seg_loader_kwargs:
 # Screen 4: Analysis Type / Customization
 analysis_type: paramap
 analysis_kwargs:
-  ref_attenuation: 0.7
-  ref_bsc: 0.0006
-analysis_funcs:                             # Empty list means all functions
-  # - attenuation_coef
+  # attenuation_coef
+  ref_atten: 0.7                            # Reference phantom attenuation (dB/cm/MHz)
+  ref_atten_exp: 1.0
+  ref_atten_offset: 0.0
+  n_secs: 5
+  sec_overlap: 0.5
+  n_fft: 8192
+  # bsc_single_freq (also uses ref_atten)
+  sample_atten: 0.7                         # Assumed sample attenuation (dB/cm/MHz)
+  ref_bsc: 0.0006                           # Reference phantom BSC (1/cm-sr)
+analysis_funcs:                             # Empty list means no functions
+  - attenuation_coef
+  - bsc_single_freq
+  - lizzi_feleppa
 
 # Screen 5: Analysis Configuration (either from GUI or saved)
 config_path: PATH/TO/SAVED/CONFIG.pkl
@@ -31,10 +41,10 @@ config_kwargs:
 # Screen 6: Visualization Type / Customization
 visualization_type: paramap
 visualization_kwargs:
-  # paramap_folder_path: z-paramaps
+  paramap_folder_path: .quantus/visualization_results   # Relative paths resolve against the repo root
 visualization_funcs:                        # Empty list means no additional functions
   - paramaps
-  # - plot_ps_data
+  - plot_ps_window_data
 
 # Screen 7: Data Export Type / Customization
 data_export_type: csv

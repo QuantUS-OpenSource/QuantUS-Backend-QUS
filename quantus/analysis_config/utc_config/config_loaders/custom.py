@@ -10,11 +10,16 @@ def custom(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         analysis_freq_band (list): [lower, upper] frequency band for analysis (Hz).
         center_frequency (float): Center frequency of the transducer (Hz).
         sampling_frequency (float): Sampling frequency (Hz).
-        ax_win_size (float): Axial length per window (mm).
-        lat_win_size (float): Lateral length per window (mm).
+        ax_win_size (float): Axial length per window (in ax_win_size_units).
+        lat_win_size (float): Lateral length per window (in lat_win_size_units).
         window_thresh (float): Percentage of window area required to be considered in ROI.
         axial_overlap (float): Percentage of window overlap in axial direction.
         lateral_overlap (float): Percentage of window overlap in lateral direction.
+
+        OPTIONAL:
+        ax_win_size_units (int): 1 = mm (default), 2 = wavelengths.
+        lat_win_size_units (int): 1 = mm (default), 2 = wavelengths, 3 = pixels.
+        speed_of_sound (float): Speed of sound (m/s) used for wavelength units. Defaults to 1540.
 
         OPTIONAL FOR 3D SCANS:
         cor_win_size (float): Coronal length per window (mm).
@@ -34,9 +39,6 @@ def custom(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         assert type(kwargs["window_thresh"]) is float, "window_thresh must be a float"
         assert type(kwargs["axial_overlap"]) is float, "axial_overlap must be a float"
         assert type(kwargs["lateral_overlap"]) is float, "lateral_overlap must be a float"
-        assert type(kwargs['speed_of_sound']) is float, 'speed_of_sound must be a float'
-        assert type(kwargs['ax_win_size_units']) is int, 'ax_win_size_units must be a int'
-        assert type(kwargs['lat_win_size_units']) is int, 'lat_win_size_units must be a int'        
 
         out.transducer_freq_band = kwargs["transducer_freq_band"]
         out.analysis_freq_band = kwargs["analysis_freq_band"]
@@ -47,11 +49,15 @@ def custom(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         out.window_thresh = kwargs["window_thresh"]
         out.axial_overlap = kwargs["axial_overlap"]
         out.lateral_overlap = kwargs["lateral_overlap"]
-        out.speed_of_sound = kwargs['speed_of_sound']
-        out.ax_win_size_units = kwargs['ax_win_size_units']
-        out.lat_win_size_units = kwargs['lat_win_size_units']
+        out.speed_of_sound = kwargs.get('speed_of_sound', out.speed_of_sound)
+        out.ax_win_size_units = kwargs.get('ax_win_size_units', out.ax_win_size_units)
+        out.lat_win_size_units = kwargs.get('lat_win_size_units', out.lat_win_size_units)
         out.cor_win_size = kwargs.get("cor_win_size", None)
         out.coronal_overlap = kwargs.get("coronal_overlap", None)
+
+        assert type(out.speed_of_sound) is float, 'speed_of_sound must be a float'
+        assert out.ax_win_size_units in (1, 2), 'ax_win_size_units must be 1 (mm) or 2 (wavelengths)'
+        assert out.lat_win_size_units in (1, 2, 3), 'lat_win_size_units must be 1 (mm), 2 (wavelengths), or 3 (pixels)'
 
         if out.cor_win_size is not None:
             assert type(out.cor_win_size) is float, "cor_win_size must be a float"

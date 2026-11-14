@@ -145,8 +145,10 @@ def core_pipeline(args) -> int:
         return 1
 
     # Check analysis setup
-    if args.analysis_funcs is None:
-        args.analysis_funcs = list(analysis_funcs[args.analysis_type].keys())
+    # A missing or empty analysis_funcs list runs no analysis functions
+    args.analysis_funcs = getattr(args, 'analysis_funcs', None) or []
+    if not len(args.analysis_funcs):
+        print("No analysis functions selected in analysis_funcs; no analysis will be computed.")
     for name in args.analysis_funcs:
         assert analysis_funcs[args.analysis_type].get(name) is not None, f"Function '{name}' not found in {args.analysis_type} analysis type.\nAvailable functions: {', '.join(analysis_funcs[args.analysis_type].keys())}"
         analysis_kwargs = getattr(analysis_funcs[args.analysis_type][name], 'required_kwargs', [])

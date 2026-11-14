@@ -5,7 +5,8 @@ from ....data_objs.visualizations import ParamapDrawingBase
 
 @required_kwargs()
 def av_ac(visualizations_obj: ParamapDrawingBase, data_dict: Dict[str, str], **kwargs) -> None:
-    """Export the average AC value (division-based estimate). The actual cross-window
+    """Export the scan-level AC value (division-based estimate, dB/cm/MHz). For the
+    window-level "att_coef" parametric map's statistics, use descr_vals. The actual cross-window
     averaging and computation happens in the "ac_scan_stats" aggregate analysis function
     (quantus/analysis/paramap/analysis_aggregators/ac_scan_stats.py), since it needs every
     window's AC-vs-frequency curve simultaneously -- this function just reads the result.

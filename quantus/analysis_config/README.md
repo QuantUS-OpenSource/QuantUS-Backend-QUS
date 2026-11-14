@@ -24,8 +24,11 @@ class RfAnalysisConfig:
         self.transducer_freq_band: List[int]  # [min, max] (Hz)
         self.analysis_freq_band: List[int]  # [lower, upper] (Hz)
         self.sampling_frequency: int  # Hz
-        self.ax_win_size: float  # axial length per window (mm)
-        self.lat_win_size: float  # lateral width per window (mm)
+        self.ax_win_size_units: int = 1 # 1 for mm, 2 for wavelength
+        self.lat_win_size_units: int = 1 # 1 for mm, 2 for wavelength, 3 for pixels
+        self.ax_win_size: float  # axial length per window (in ax_win_size_units)
+        self.lat_win_size: float  # lateral width per window (in lat_win_size_units)
+        self.speed_of_sound: float = 1540. # speed of sound through tissue (m/s), used for wavelength units
         self.window_thresh: float  # % of window area required to be in ROI
         self.axial_overlap: float  # % of ax window length to move before next window
         self.lateral_overlap: float  # % of lat window length to move before next window
@@ -37,7 +40,7 @@ class RfAnalysisConfig:
 
 ```
 
-Note 3D scan parameters are only required for 3D scans, and can be left as `None` for 2D scans.
+Note 3D scan parameters are only required for 3D scans, and can be left as `None` for 2D scans. Window size units default to mm, so plugins only need to set them (and `speed_of_sound`) to use wavelength or pixel units. Wavelength and pixel units currently apply to 2D windowing only.
 
 ### Plugin Structure
 

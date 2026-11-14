@@ -24,8 +24,8 @@ class ParamapAnalysis(ParamapAnalysisBase):
         
         self.analysis_kwargs = kwargs
         self.function_names = function_names
-        self.ax_win_size_pixels = None
-        self.lat_win_size_pixels = None
+        self.ax_win_len_pixels = None
+        self.lat_win_len_pixels = None
         _, self.functions = get_analysis_types()
         self.seg_data = seg
         self.image_data = image_data
@@ -139,14 +139,14 @@ class ParamapAnalysis(ParamapAnalysisBase):
         if self.config.ax_win_size_units == 1: # mm
             self.ax_win_len_pixels = round(self.config.ax_win_size / self.image_data.axial_res)
         elif self.config.ax_win_size_units == 2: # wavelength
-            self.ax_win_len_pixels = round((self.config.ax_win_size_units * wavelength) / self.image_data.axial_res)
+            self.ax_win_len_pixels = round((self.config.ax_win_size * wavelength) / self.image_data.axial_res)
         else:
             raise ValueError("Axial window size units not recognized")
         
         if self.config.lat_win_size_units == 1: # mm
             self.lat_win_len_pixels = round(self.config.lat_win_size / self.image_data.lateral_res)
         elif self.config.lat_win_size_units == 2: # wavelength
-            self.lat_win_len_pixels = round((self.config.lat_win_size_units * wavelength) / self.image_data.lateral_res)
+            self.lat_win_len_pixels = round((self.config.lat_win_size * wavelength) / self.image_data.lateral_res)
         elif self.config.lat_win_size_units == 3: # pix
             self.lat_win_len_pixels = round(self.config.lat_win_size)
         else:
