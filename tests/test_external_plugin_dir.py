@@ -111,3 +111,70 @@ def test_external_aggregate_plugin_discovered_from_sibling_folder(monkeypatch, t
     assert functions["paramap"]["test_ext_aggregate_method"].outputs == ("test_ext_aggregate_output",)
     assert functions["paramap"]["test_ext_aggregate_method"].location == ("aggregate",)
     assert "attenuation_coef" in functions["paramap"]  # built-ins still present alongside it
+
+
+def test_external_same_filename_in_two_stages_both_discovered(monkeypatch, tmp_path):
+    """Same-named files in different external plugin directories must not collide (each
+    directory is imported as its own package, not via a shared sys.path entry)."""
+    from quantus.data_export.options import get_data_export_types
+
+    _write(tmp_path / "analysis" / "paramap" / "analysis_methods" / "test_ext_shared_name.py", """
+        from quantus.analysis.paramap.decorators import output_vars
+
+        @output_vars("x")
+        def test_ext_shared_analysis(scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs):
+            pass
+    """)
+    _write(tmp_path / "data_export" / "csv" / "export_funcs" / "test_ext_shared_name.py", """
+        from quantus.data_export.csv.decorators import required_kwargs
+
+        @required_kwargs()
+        def test_ext_shared_export(visualizations_obj, data_dict, **kwargs):
+            pass
+    """)
+    monkeypatch.setenv("QUANTUS_PLUGIN_DIR", str(tmp_path))
+
+    _, analysis_funcs = get_analysis_types()
+    _, export_funcs = get_data_export_types()
+    assert "test_ext_shared_analysis" in analysis_funcs["paramap"]
+    assert "test_ext_shared_export" in export_funcs["csv"]
+
+
+def test_external_folder_plugin_relative_sibling_import(monkeypatch, tmp_path):
+    _write(tmp_path / "image_loading" / "test_ext_rel_scanner" / "helpers.py", """
+        EXTS = ['.testrel']
+    """)
+    _write(tmp_path / "image_loading" / "test_ext_rel_scanner" / "main.py", """
+        from quantus.data_objs.image import UltrasoundRfImage
+        from .helpers import EXTS
+
+        class EntryClass(UltrasoundRfImage):
+            extensions = EXTS
+            spatial_dims = 2
+            gui_kwargs = []
+            cli_kwargs = []
+            default_gui_kwarg_vals = []
+            default_cli_kwarg_vals = []
+    """)
+    monkeypatch.setenv("QUANTUS_PLUGIN_DIR", str(tmp_path))
+
+    loaders = get_scan_loaders()
+    assert loaders["test_ext_rel_scanner"]["file_exts"] == ['.testrel']
+
+
+def test_external_plugin_does_not_shadow_stdlib(monkeypatch, tmp_path):
+    import json
+
+    _write(tmp_path / "analysis" / "paramap" / "analysis_methods" / "json.py", """
+        from quantus.analysis.paramap.decorators import output_vars
+
+        @output_vars("x")
+        def test_ext_json_named(scan_rf_window, phantom_rf_window, window, config, image_data, **kwargs):
+            pass
+    """)
+    monkeypatch.setenv("QUANTUS_PLUGIN_DIR", str(tmp_path))
+
+    _, functions = get_analysis_types()
+    assert "test_ext_json_named" in functions["paramap"]
+    import importlib
+    assert importlib.import_module("json") is json and hasattr(json, "dumps")

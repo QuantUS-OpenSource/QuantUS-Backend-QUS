@@ -11,7 +11,7 @@ from ....data_objs.image import UltrasoundRfImage
 @required_kwargs("ref_bsc_path", "sample_atten", "sample_atten_exp", "sample_atten_offset",
                  "ref_atten", "ref_atten_exp", "ref_atten_offset",
                  "n_fft", "cirs_path", "cirs_mode")
-@default_kwarg_vals("", 1., 1., 0., 1., 1., 0., 8192, 25, 1)
+@default_kwarg_vals("", 0.7, 1., 0., 0.7, 1., 0., 8192, 25, 1)
 def bsc_transmission_compensation(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
             window: Window, config: RfAnalysisConfig, 
             image_data: UltrasoundRfImage, **kwargs) -> None:

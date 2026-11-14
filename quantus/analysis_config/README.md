@@ -24,8 +24,11 @@ class RfAnalysisConfig:
         self.transducer_freq_band: List[int]  # [min, max] (Hz)
         self.analysis_freq_band: List[int]  # [lower, upper] (Hz)
         self.sampling_frequency: int  # Hz
-        self.ax_win_size: float  # axial length per window (mm)
-        self.lat_win_size: float  # lateral width per window (mm)
+        self.ax_win_size_units: str  # WIN_SIZE_UNITS_MM or WIN_SIZE_UNITS_WAVELENGTH
+        self.lat_win_size_units: str  # WIN_SIZE_UNITS_MM, WIN_SIZE_UNITS_WAVELENGTH, or WIN_SIZE_UNITS_A_LINES
+        self.ax_win_size: float  # axial length per window (in ax_win_size_units)
+        self.lat_win_size: float  # lateral width per window (in lat_win_size_units)
+        self.speed_of_sound: float  # speed of sound through tissue (m/s), used for wavelength units
         self.window_thresh: float  # % of window area required to be in ROI
         self.axial_overlap: float  # % of ax window length to move before next window
         self.lateral_overlap: float  # % of lat window length to move before next window
@@ -38,6 +41,8 @@ class RfAnalysisConfig:
 ```
 
 Note 3D scan parameters are only required for 3D scans, and can be left as `None` for 2D scans.
+
+Window size units are named constants defined in [quantus/data_objs/analysis_config.py](../data_objs/analysis_config.py): `WIN_SIZE_UNITS_MM` (`"mm"`), `WIN_SIZE_UNITS_WAVELENGTH` (`"number of wavelength"`, converted to mm via `speed_of_sound / center_frequency`), and `WIN_SIZE_UNITS_A_LINES` (`"A-Lines"`, lateral only). They have no defaults, so every 2D config loader must set `ax_win_size_units`, `lat_win_size_units`, and `speed_of_sound` (see `clarius_C3_config.py` for a wavelength/A-line example). Units currently apply to 2D windowing only.
 
 ### Plugin Structure
 

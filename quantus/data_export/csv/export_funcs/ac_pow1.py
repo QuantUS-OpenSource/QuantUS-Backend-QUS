@@ -5,7 +5,7 @@ from ....data_objs.visualizations import ParamapDrawingBase
 
 @required_kwargs()
 def ac_pow1(visualizations_obj: ParamapDrawingBase, data_dict: Dict[str, str], **kwargs) -> None:
-    """Export sample AC values computed using the power1 model for curve fitting. The actual
+    """Export the scan-level AC power-law fit (att = a * f^b) parameters. The actual
     cross-window averaging and curve fit happens in the "ac_scan_stats" aggregate analysis
     function (quantus/analysis/paramap/analysis_aggregators/ac_scan_stats.py), since it needs
     every window's AC-vs-frequency curve simultaneously -- this function just reads the result.

@@ -10,19 +10,32 @@ from ....data_objs.image import UltrasoundRfImage
 @output_vars("att_coefs", "att_subf", "ac_slope", "ac_intercept")
 @required_kwargs("ref_atten", "ref_atten_exp", "ref_atten_offset", "n_secs", "sec_overlap", "n_fft")
 @default_kwarg_vals(0.7, 1., 0., 5, 0.50, 8192)
-def attenuation_coef(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray, 
-                    window: Window, config: RfAnalysisConfig, 
+def attenuation_coef(scan_rf_window: np.ndarray, phantom_rf_window: np.ndarray,
+                    window: Window, config: RfAnalysisConfig,
                     image_data: UltrasoundRfImage, **kwargs) -> None:
-    """Compute the local attenuation coefficient of the ROI using the Spectral Difference
-    Method for Local Attenuation Estimation. This method computes the attenuation coefficient
-    for multiple frequencies and returns the slope of the attenuation as a function of frequency.
+    """Compute the window-level attenuation coefficient using the Spectral Difference
+    Method for Local Attenuation Estimation. The window is split into n_secs overlapping
+    axial sections, and the spectral ratio vs. depth is fit at every frequency in the
+    analysis band.
 
-    Args:
-        rf_data (np.ndarray): RF data of the ROI (n lines x m samples).
-        ref_rf_data (np.ndarray): RF data of the phantom (n lines x m samples).
-        overlap (float): Overlap percentage for analysis windows.
-        window_depth (int): Depth of each window in samples.
-    Updated and verified : Feb 2025 - IR
+    For scan-level AC estimates (computed from every window's curve at once), also run
+    the "ac_scan_stats" aggregate function.
+
+    Kwargs:
+        ref_atten (float): Reference phantom attenuation (dB/cm/MHz^ref_atten_exp).
+        ref_atten_exp (float): Frequency exponent of the reference attenuation.
+        ref_atten_offset (float): Frequency-independent reference attenuation (dB/cm).
+        n_secs (int): Number of axial sections per window.
+        sec_overlap (float): Fractional overlap between axial sections.
+        n_fft (int): Number of frequency samples in the analysis band.
+
+    Writes:
+        att_coefs: Window-level AC vs. frequency (dB/cm), one value per att_subf.
+        att_subf: Frequencies of att_coefs (MHz).
+        ac_slope: Slope of a linear fit of att_coefs vs. att_subf (dB/cm/MHz) -- the
+            attenuation coefficient slope (ACS). Scalar, so it's drawn as a parametric map
+            and summarized by descr_vals.
+        ac_intercept: Intercept of that fit (dB/cm).
     """
     if phantom_rf_window.ndim == 3:
         assert scan_rf_window.ndim == 2, "AC only supported for 2D data"

@@ -43,6 +43,12 @@ pip install -r requirements.txt
 pip install pyradiomics==3.0.1 --no-build-isolation
 ```
 
+QuantUS isn't installed as a package (there's no `pyproject.toml`), so `import quantus` only works from the repository root. Run commands from there, or add the repository root to `PYTHONPATH` when importing QuantUS from scripts elsewhere:
+
+```bash
+export PYTHONPATH=/path/to/QuantUS-Backend-QUS:$PYTHONPATH
+```
+
 ## Usage
 
 ### Interfaces

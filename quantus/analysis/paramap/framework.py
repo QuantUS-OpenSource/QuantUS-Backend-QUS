@@ -25,8 +25,8 @@ class ParamapAnalysis(ParamapAnalysisBase):
         
         self.analysis_kwargs = kwargs
         self.function_names = function_names
-        self.ax_win_size_pixels = None
-        self.lat_win_size_pixels = None
+        self.ax_win_len_pixels = None
+        self.lat_win_len_pixels = None
         _, self.functions = get_analysis_types()
         self.seg_data = seg
         self.image_data = image_data
