@@ -1,7 +1,8 @@
-import importlib
 from pathlib import Path
 
 from argparse import ArgumentParser
+
+from ...plugin_utils import discover_plugin_classes
 
 def scan_loader_args(parser: ArgumentParser):
     parser.add_argument('scan_path', type=str, help='Path to scan signals')
@@ -21,26 +22,20 @@ def get_scan_loaders() -> dict:
         dict: Dictionary of scan loaders.
     """
     current_dir = Path(__file__).parent
+    entry_classes = discover_plugin_classes(
+        current_dir, __package__, "main", lambda name: "EntryClass", external_stage="image_loading"
+    )
+
     classes = {}
-    for folder in current_dir.iterdir():
-        # Check if the item is a directory and not a hidden directory
-        if folder.is_dir() and not folder.name.startswith("_"):
-            try:
-                # Attempt to import the module
-                module = importlib.import_module(f".{folder.name}.main", package=__package__)
-                entry_class = getattr(module, "EntryClass", None)
-                if entry_class:
-                    classes[folder.name] = {}
-                    classes[folder.name]['cls'] = entry_class
-                    classes[folder.name]['file_exts'] = entry_class.extensions
-                    classes[folder.name]['spatial_dims'] = entry_class.spatial_dims
-                    classes[folder.name]['gui_kwargs'] = entry_class.gui_kwargs
-                    classes[folder.name]['cli_kwargs'] = entry_class.cli_kwargs
-                    classes[folder.name]['default_gui_kwarg_vals'] = entry_class.default_gui_kwarg_vals
-                    classes[folder.name]['default_cli_kwarg_vals'] = entry_class.default_cli_kwarg_vals
-            except ModuleNotFoundError as e:
-                print(f"Module {folder.name} could not be found: {e}")
-                # Handle the case where the module cannot be found
-                pass
-    
+    for folder_name, entry_class in entry_classes.items():
+        classes[folder_name] = {
+            'cls': entry_class,
+            'file_exts': entry_class.extensions,
+            'spatial_dims': entry_class.spatial_dims,
+            'gui_kwargs': entry_class.gui_kwargs,
+            'cli_kwargs': entry_class.cli_kwargs,
+            'default_gui_kwarg_vals': entry_class.default_gui_kwarg_vals,
+            'default_cli_kwarg_vals': entry_class.default_cli_kwarg_vals,
+        }
+
     return classes

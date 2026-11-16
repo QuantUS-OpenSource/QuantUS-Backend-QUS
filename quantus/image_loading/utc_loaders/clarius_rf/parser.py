@@ -611,9 +611,6 @@ class ClariusParser():
         
         self.scan_converted = None
                 
-        self.max_samples_per_line_C3 = 2928
-        self.max_samples_per_line_L15 = 2928
-
         self.__run()
                 
     ###################################################################################
@@ -898,95 +895,50 @@ class ClariusParser():
     
     def set_full_signal(self):
         """
-        Extends the RF signal data by adding delay samples and padding to match standard dimensions.
-        
-        This method:
-        1. Adds delay samples to the beginning of the signal
-        2. Pads the signal to match standard dimensions based on probe type (C3 or L15)
-        
-        Raises:
-            ValueError: If probe configuration is invalid or missing
-            IndexError: If array shapes are incompatible for padding
-            AttributeError: If required attributes are missing
+        Prepends the delay samples (as zeros) to every A-line, so row index maps to
+        depth via `self.full_depth_mm` (0 to imaging depth).
+
+        No padding is added at the deep end. Earlier versions zero-padded every line to
+        a fixed 2928 samples (treating every non-curvilinear probe as L15), which put a
+        black band at the bottom of linear-probe images (20*log10(0) = -inf), fed zeros
+        into the RF used for analysis, and skewed the startDepth1 estimate.
         """
+        pad = ((0, 0), (self.delay_samples, 0), (0, 0))
+        self.rf_raw_data_3d = np.pad(self.rf_raw_data_3d, pad, mode='constant')
+        self.rf_no_tgc_raw_data_3d = np.pad(self.rf_no_tgc_raw_data_3d, pad, mode='constant')
+        logging.info(f"Prepended {self.delay_samples} delay samples; signal shape {self.rf_raw_data_3d.shape}")
+
+    ###################################################################################
+
+    def _probe_radius_mm(self) -> float:
+        """Probe radius in mm from rf.yml. Returns 0.0 if missing, empty, zero or unparseable."""
+        radius = (self.rf_yml_obj.rf_probe or {}).get("radius")
+        if isinstance(radius, str):
+            radius = self.extract_first_num(radius)
         try:
-            # Add delay samples
-            delay_samples = self.rf_yml_obj.rf_delay_samples
-            logging.info(f"Adding {delay_samples} delay samples to the beginning of signals")
-            
-            try:
-                original_shape = self.rf_raw_data_3d.shape
-                logging.debug(f"Original signal shape before padding: {original_shape}")
-                
-                # Add delay samples to both signals
-                self.rf_raw_data_3d = np.pad(self.rf_raw_data_3d, ((0, 0), (0, delay_samples), (0, 0)), mode='constant')
-                self.rf_no_tgc_raw_data_3d = np.pad(self.rf_no_tgc_raw_data_3d, ((0, 0), (0, delay_samples), (0, 0)), mode='constant')
-                logging.info(f"Signal shapes after delay padding: {self.rf_raw_data_3d.shape}")
-            
-            except (ValueError, IndexError) as e:
-                logging.error(f"Error during delay sample padding: {str(e)}")
-                raise
-            
-            try:
-                # Determine probe type and pad accordingly
-                if not hasattr(self.rf_yml_obj, 'rf_probe'):
-                    raise AttributeError("RF probe configuration missing")
-                    
-                if self.rf_yml_obj.rf_probe.get("radius") is not None:
-                    target_samples = self.max_samples_per_line_C3
-                    probe_type = "C3"
-                else:
-                    target_samples = self.max_samples_per_line_L15
-                    probe_type = "L15"
-                
-                logging.info(f"Detected {probe_type} probe - padding signals to {target_samples} samples per line")
-                
-                # Calculate required padding
-                current_samples = self.rf_raw_data_3d.shape[1]
-                padding_needed = target_samples - current_samples
-                
-                if padding_needed < 0:
-                    raise ValueError(f"Current samples ({current_samples}) exceeds target samples ({target_samples})")
-                
-                if padding_needed > 0:
-                    try:
-                        self.rf_raw_data_3d = np.pad(self.rf_raw_data_3d, ((0, 0), (0, padding_needed), (0, 0)), mode='constant')
-                        self.rf_no_tgc_raw_data_3d = np.pad(self.rf_no_tgc_raw_data_3d, ((0, 0), (0, padding_needed), (0, 0)), mode='constant')
-                        logging.info(f"Added {padding_needed} padding samples to reach standard dimensions")
-                    except (ValueError, IndexError) as e:
-                        logging.error(f"Error during final padding: {str(e)}")
-                        raise
-                
-                final_shape = self.rf_raw_data_3d.shape
-                logging.info(f"Full signal creation complete. Final shape: {final_shape}")
-                
-            except (ValueError, IndexError, AttributeError) as e:
-                logging.error(f"Error during probe-specific padding: {str(e)}")
-                raise
-                
-        except Exception as e:
-            logging.error(f"Unexpected error in set_full_signal: {str(e)}")
-            raise
-        
+            return float(radius) if radius is not None else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    def is_curvilinear(self) -> bool:
+        """A probe is curvilinear only if rf.yml gives it a positive radius."""
+        return self._probe_radius_mm() > 0
+
     ###################################################################################
     
     def set_data_of_clarius_info_struct(self):
         
-        try:
-            self.clarius_info_struct.width1 = self.rf_yml_obj.rf_probe["radius"] * 2
+        if self.is_curvilinear():
+            self.clarius_info_struct.width1 = self._probe_radius_mm() * 2
             self.scan_converted = True
-        except KeyError:
+        else:
             self.scan_converted = False
             
         self.clarius_info_struct.endDepth1 = self.extract_first_num(self.rf_yml_obj.rf_imaging_depth) / 1000 # [m]
         if self.start_depth_factor is None:
-            if self.use_tgc:
-                tgc_envelope_3d = get_signal_envelope_xd(self.rf_raw_data_3d, hilbert_transform_axis=self.hilbert_transform_axis)
-                bmode = 20 * np.log10(tgc_envelope_3d)
-            else:
-                bmode = 20 * np.log10(self.no_tgc_envelope_3d)
-            bmode = np.transpose(bmode, (1, 0, 2))
-            self.clarius_info_struct.startDepth1 = (1 - (self.rf_yml_obj.rf_size['samples per line'] / bmode.shape[0])) * self.clarius_info_struct.endDepth1 # [m]
+            # Recorded samples start after the delay samples prepended in set_full_signal.
+            total_samples = self.rf_raw_data_3d.shape[1]  # delay + recorded samples
+            self.clarius_info_struct.startDepth1 = (1 - self.rf_yml_obj.rf_size['samples per line'] / total_samples) * self.clarius_info_struct.endDepth1  # [m]
         else:
             self.clarius_info_struct.startDepth1 = self.clarius_info_struct.endDepth1 * self.start_depth_factor
         self.clarius_info_struct.samplingFrequency = self.extract_first_num(self.rf_yml_obj.rf_sampling_rate) * 1e6 # [Hz]
@@ -1021,19 +973,23 @@ class ClariusParser():
         bmode -= np.amin(bmode); bmode *= 255 / np.amax(bmode)
         
         if self.scan_converted:
-            
+            # Define the apex to face distance based on the probe radius    
+            apex_to_face = self._probe_radius_mm() / 1000 # [m]
+            sc_start_depth = self.clarius_info_struct.startDepth1 + apex_to_face
+            sc_stop_depth = self.clarius_info_struct.endDepth1 + apex_to_face
+
             scBmodeStruct, hCm1, wCm1 = scanConvert(bmode[:,:,0],
                                                     self.clarius_info_struct.width1,
                                                     self.clarius_info_struct.tilt1,
-                                                    self.clarius_info_struct.startDepth1, 
-                                                    self.clarius_info_struct.endDepth1,
+                                                    sc_start_depth,
+                                                    sc_stop_depth,
                                                     desiredHeight=500)
-            
+
             scBmodes = np.array([scanConvert(bmode[:,:,i],
                                              self.clarius_info_struct.width1,
                                              self.clarius_info_struct.tilt1,
-                                             self.clarius_info_struct.startDepth1, 
-                                             self.clarius_info_struct.endDepth1,
+                                             sc_start_depth,
+                                             sc_stop_depth,
                                              desiredHeight=500)[0].scArr for i in tqdm(range(rf_atgc.shape[2]))])
             
             self.clarius_info_struct.yResRF = self.clarius_info_struct.endDepth1*1000 / self.clarius_info_struct.samplesPerLine
@@ -1042,7 +998,18 @@ class ClariusParser():
             self.clarius_info_struct.lateralRes = wCm1*10 / scBmodeStruct.scArr.shape[1]
             self.clarius_info_struct.depth = hCm1*10 #mm
             self.clarius_info_struct.width = wCm1*10 #mm
-        
+
+            # yResRF/xResRF/axialRes/lateralRes above are already computed from the pure
+            # tissue-depth values, so it's now safe to fold the apex offset into
+            # startDepth1/endDepth1 themselves. main.py reads these two fields next for
+            # image_data.start_depth/end_depth, which ParamapDrawingBase (visualizations.py)
+            # re-derives its window-overlay scan conversion from via its own scanConvert()
+            # call -- that call needs the SAME apex-adjusted depths used above for
+            # scBmodeStruct/scBmodes, or the window overlay drifts from the displayed
+            # B-mode/ROI geometry (windows rendered too close to the apex).
+            self.clarius_info_struct.startDepth1 = sc_start_depth
+            self.clarius_info_struct.endDepth1 = sc_stop_depth
+
             self.clarius_data_struct.scBmodeStruct = scBmodeStruct
             self.clarius_data_struct.scBmode = scBmodes
             self.clarius_data_struct.bMode = np.transpose(bmode, (2, 0, 1))
@@ -1459,12 +1426,12 @@ def clariusRfParser(imgFilename: str,
 
     imgData       = main_sample_obj.clarius_data_struct
     imgInfo       = main_sample_obj.clarius_info_struct
-    scanConverted = main_sample_obj.scan_converted
-    
-    refData       = phantom_sample_obj.clarius_data_struct   
+    refData       = phantom_sample_obj.clarius_data_struct
     refInfo       = phantom_sample_obj.clarius_info_struct
-    scanConverted = phantom_sample_obj.scan_converted
-            
+
+    # Geometry comes from the scan; the phantom should match it.
+    scanConverted = main_sample_obj.scan_converted
+
     return imgData, imgInfo, refData, refInfo, scanConverted
 
 ###################################################################################

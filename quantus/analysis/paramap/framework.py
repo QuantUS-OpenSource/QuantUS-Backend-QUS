@@ -3,9 +3,18 @@ from typing import List
 
 from ...data_objs import UltrasoundRfImage, BmodeSeg, RfAnalysisConfig, ParamapAnalysisBase
 from ...data_objs.analysis import Window
+from ...data_objs.analysis_config import WIN_SIZE_UNITS_MM, WIN_SIZE_UNITS_WAVELENGTH, WIN_SIZE_UNITS_A_LINES
 from ..options import get_analysis_types
+from .decorators import PHANTOM_WINDOW_POLICIES
 
 class_name = "ParamapAnalysis"
+
+def get_phantom_window_policy(function) -> str:
+    """The @phantom_window policy a function declared, defaulting to "matched"."""
+    policy = getattr(function, 'phantom_window', ("matched",))
+    if len(policy) != 1 or policy[0] not in PHANTOM_WINDOW_POLICIES:
+        raise ValueError(f"{function.__name__}: @phantom_window must be exactly one of {PHANTOM_WINDOW_POLICIES}, got {policy}")
+    return policy[0]
 
 class ParamapAnalysis(ParamapAnalysisBase):
     """
@@ -24,6 +33,8 @@ class ParamapAnalysis(ParamapAnalysisBase):
         
         self.analysis_kwargs = kwargs
         self.function_names = function_names
+        self.ax_win_len_pixels = None
+        self.lat_win_len_pixels = None
         _, self.functions = get_analysis_types()
         self.seg_data = seg
         self.image_data = image_data
@@ -41,7 +52,8 @@ class ParamapAnalysis(ParamapAnalysisBase):
         """
         self.ordered_funcs = []; self.ordered_func_names = []; self.results_names = []
         self.unordered_window_func_names = set(); self.unordered_full_seg_func_names = set()
-        
+        self.unordered_aggregate_func_names = set()
+
         def assign_locs(func_name, deps, locs):
             """Assign locations for the function based on its dependencies and locations."""
             if 'window' in locs:
@@ -49,6 +61,9 @@ class ParamapAnalysis(ParamapAnalysisBase):
                 [self.unordered_full_seg_func_names.add(dep) for dep in deps]
             if 'full_segmentation' in locs:
                 self.unordered_full_seg_func_names.add(func_name)
+                [self.unordered_window_func_names.add(dep) for dep in deps]
+            if 'aggregate' in locs:
+                self.unordered_aggregate_func_names.add(func_name)
                 [self.unordered_window_func_names.add(dep) for dep in deps]
         
         def process_deps(func_name):
@@ -65,6 +80,7 @@ class ParamapAnalysis(ParamapAnalysisBase):
                 # Handle function locations
                 locs = function.location if hasattr(function, 'location') else ['window', 'full_segmentation']
                 assign_locs(func_name, deps, locs)
+                get_phantom_window_policy(function)  # fail fast on an invalid @phantom_window
             else:
                 raise ValueError(f"Function '{func_name}' not found!")
             
@@ -127,6 +143,24 @@ class ParamapAnalysis(ParamapAnalysisBase):
                         new_window.cor_min = int(coronal_pos)
                         new_window.cor_max = int(coronal_pos + coronal_pix_size)
                         self.windows.append(new_window)
+                        
+    def get_seg_window_lens(self):
+        wavelength = self.config.speed_of_sound / self.config.center_frequency * 1000 # mm
+        if self.config.ax_win_size_units == WIN_SIZE_UNITS_MM:
+            self.ax_win_len_pixels = round(self.config.ax_win_size / self.image_data.axial_res)
+        elif self.config.ax_win_size_units == WIN_SIZE_UNITS_WAVELENGTH:
+            self.ax_win_len_pixels = round((self.config.ax_win_size * wavelength) / self.image_data.axial_res)
+        else:
+            raise ValueError(f"Axial window size units not recognized: '{self.config.ax_win_size_units}'")
+
+        if self.config.lat_win_size_units == WIN_SIZE_UNITS_MM:
+            self.lat_win_len_pixels = round(self.config.lat_win_size / self.image_data.lateral_res)
+        elif self.config.lat_win_size_units == WIN_SIZE_UNITS_WAVELENGTH:
+            self.lat_win_len_pixels = round((self.config.lat_win_size * wavelength) / self.image_data.lateral_res)
+        elif self.config.lat_win_size_units == WIN_SIZE_UNITS_A_LINES:
+            self.lat_win_len_pixels = round(self.config.lat_win_size)
+        else:
+            raise ValueError(f"Lateral window size units not recognized: '{self.config.lat_win_size_units}'")
         
     def generate_seg_windows(self):
         """Generate windows for parametric map analysis based on user-defined segmentation.
@@ -134,38 +168,40 @@ class ParamapAnalysis(ParamapAnalysisBase):
         if len(self.seg_data.seg_mask.shape) == 3: # 3D analysis
             return self.generate_seg_windows_3d()
         
+        self.get_seg_window_lens()
+        
         # Some axial/lateral dims
-        ax_pix_size = round(self.config.ax_win_size / self.image_data.axial_res)  # mm/(mm/pix)
-        lat_pix_size = round(self.config.lat_win_size / self.image_data.lateral_res)  # mm/(mm/pix)
+        ax_pix_size = self.ax_win_len_pixels
+        lat_pix_size = self.lat_win_len_pixels
         
         axial = list(range(self.image_data.rf_data.shape[0]))
         lateral = list(range(self.image_data.rf_data.shape[1]))
 
         # Overlap fraction determines the incremental distance between windows
-        axial_increment = ax_pix_size * (1 - self.config.axial_overlap)
-        lateral_increment = lat_pix_size * (1 - self.config.lateral_overlap)
+        axial_increment = round(ax_pix_size * (1 - self.config.axial_overlap))
+        lateral_increment = round(lat_pix_size * (1 - self.config.lateral_overlap))
+        
+        if lateral_increment < 1:
+            print('Warning: there are too few number of A-lines in the sub-ROI, possibly because the lateral step size is too large. Increasing the lateral sub-ROI size is suggested.')
+            lateral_increment = 1
 
         # Determine windows - Find Region to Iterate Over
-        axial_start = max(min(self.spline_y), axial[0])
-        axial_end = min(max(self.spline_y), axial[-1] - ax_pix_size)
-        lateral_start = max(min(self.spline_x), lateral[0])
-        lateral_end = min(max(self.spline_x), lateral[-1] - lat_pix_size)
+        mask = self.seg_data.seg_mask
+        mask_indices = np.where(mask)
+        axial_start = mask_indices[0][0]
+        axial_end = min(mask_indices[0][-1], mask.shape[0]-ax_pix_size-1)
+        lateral_start = np.min(mask_indices[1])
+        lateral_end = min(np.max(mask_indices[1]), mask.shape[1]-lat_pix_size-1)
 
         self.windows = []
         mask = self.seg_data.seg_mask
 
-        for axial_pos in np.arange(axial_start, axial_end, axial_increment):
-            for lateral_pos in np.arange(lateral_start, lateral_end, lateral_increment):
-                # Convert axial and lateral positions in mm to Indices
-                axial_abs_ar = abs(axial - axial_pos)
-                axial_ind = np.where(axial_abs_ar == min(axial_abs_ar))[0][0]
-                lateral_abs_ar = abs(lateral - lateral_pos)
-                lateral_ind = np.where(lateral_abs_ar == min(lateral_abs_ar))[0][0]
-
+        for axial_ix in range(axial_start, axial_end, axial_increment):
+            for lateral_ix in range(lateral_start, lateral_end, lateral_increment):
                 # Determine if ROI is Inside Analysis Region
                 mask_vals = mask[
-                    axial_ind : (axial_ind + ax_pix_size),
-                    lateral_ind : (lateral_ind + lat_pix_size),
+                    axial_ix : (axial_ix + ax_pix_size),
+                    lateral_ix : (lateral_ix + lat_pix_size),
                 ]
 
                 # Define Percentage Threshold
@@ -176,10 +212,10 @@ class ParamapAnalysis(ParamapAnalysisBase):
                 if percentage_ones > self.config.window_thresh:
                     # Add window to output structure, quantize back to valid distances
                     new_window = Window()
-                    new_window.lat_min = int(lateral[lateral_ind])
-                    new_window.lat_max = int(lateral[lateral_ind + lat_pix_size - 1])
-                    new_window.ax_min = int(axial[axial_ind])
-                    new_window.ax_max = int(axial[axial_ind + ax_pix_size - 1])
+                    new_window.lat_min = int(lateral[lateral_ix])
+                    new_window.lat_max = int(lateral[lateral_ix + lat_pix_size - 1])
+                    new_window.ax_min = int(axial[axial_ix])
+                    new_window.ax_max = int(axial[axial_ix + ax_pix_size - 1])
                     self.windows.append(new_window)
 
     def compute_window_vals(self, window, full_segmentation=False):
@@ -192,29 +228,72 @@ class ParamapAnalysis(ParamapAnalysisBase):
             img_window = self.image_data.rf_data[
                 window.ax_min: window.ax_max + 1, window.lat_min: window.lat_max + 1
             ]
-            phantom_window = self.image_data.phantom_rf_data[
-                window.ax_min: window.ax_max + 1, window.lat_min: window.lat_max + 1
-            ]
         elif self.image_data.bmode.ndim == 3:
             img_window = self.image_data.rf_data[
-                window.cor_min: window.cor_max + 1, window.lat_min: window.lat_max + 1,
-                window.ax_min: window.ax_max + 1
-            ]
-            phantom_window = self.image_data.phantom_rf_data[
                 window.cor_min: window.cor_max + 1, window.lat_min: window.lat_max + 1,
                 window.ax_min: window.ax_max + 1
             ]
         else:
             raise ValueError("Invalid RF data dimensions. Expected 2D or 3D data.")
 
-        if not full_segmentation:
-            for i, function in enumerate(self.ordered_funcs):
-                if self.ordered_func_names[i] in self.unordered_window_func_names:
-                    function(img_window, phantom_window, window, self.config, self.image_data, **self.analysis_kwargs)
-        else:
-            for i, function in enumerate(self.ordered_funcs):
-                if self.ordered_func_names[i] in self.unordered_full_seg_func_names:
-                    function(img_window, phantom_window, window, self.config, self.image_data, **self.analysis_kwargs)
+        func_names = self.unordered_full_seg_func_names if full_segmentation else self.unordered_window_func_names
+        phantom_windows = {}  # policy -> phantom window, so each slice is built at most once per window
+        for i, function in enumerate(self.ordered_funcs):
+            if self.ordered_func_names[i] in func_names:
+                policy = get_phantom_window_policy(function)
+                if policy not in phantom_windows:
+                    phantom_windows[policy] = self.get_phantom_window(window, policy)
+                function(img_window, phantom_windows[policy], window, self.config, self.image_data, **self.analysis_kwargs)
+
+    def get_phantom_window(self, window: Window, policy: str) -> np.ndarray:
+        """Slice the phantom RF data for one window, according to a function's declared
+        @phantom_window policy (see PHANTOM_WINDOW_POLICIES in decorators.py).
+        """
+        phantom = self.image_data.phantom_rf_data
+        if self.image_data.bmode.ndim == 3:
+            # 3D phantom references are always spatially matched to the scan window.
+            return phantom[
+                window.cor_min: window.cor_max + 1, window.lat_min: window.lat_max + 1,
+                window.ax_min: window.ax_max + 1
+            ]
+
+        if policy == "central_lines":
+            n_ref_lines = phantom.shape[1]
+            lat_start_ix = round(0.25*n_ref_lines)-1
+            lat_end_ix = round(0.75*n_ref_lines)-1
+            return phantom[window.ax_min: window.ax_max + 1, lat_start_ix: lat_end_ix+1]
+
+        # "matched": same lateral width as the scan window. If the phantom has fewer lines than
+        # the window's position needs, shift the window inward so the shapes still agree
+        # (e.g. hscan divides scan by phantom element-wise).
+        n_lines = window.lat_max - window.lat_min + 1
+        if phantom.shape[1] < n_lines:
+            raise ValueError(f"Phantom has {phantom.shape[1]} lines but the analysis window needs {n_lines}.")
+        lat_start = min(window.lat_min, phantom.shape[1] - n_lines)
+        return phantom[window.ax_min: window.ax_max + 1, lat_start: lat_start + n_lines]
+
+    def compute_aggregate_vals(self):
+        """Run aggregate functions once every window has been fully processed, giving them
+        read access to every window's results (unlike window/full_segmentation functions,
+        which only ever see their own window). Writes results onto self.aggregate_results.
+
+        Runs after the per-window pass (see compute_paramaps()), in the same dependency
+        order computed by determine_func_order(), so an aggregate function's declared
+        @dependencies(...) are guaranteed to be populated on every window by the time it runs.
+
+        analysis_kwargs['aggregate_evict'] (optional, config-provided list of attribute
+        names) is deleted from every window's .results afterward, to reclaim memory for
+        bulky per-window intermediates (e.g. full frequency-curve arrays) that only existed
+        to feed an aggregation and aren't needed by visualization/export.
+        """
+        for i, function in enumerate(self.ordered_funcs):
+            if self.ordered_func_names[i] in self.unordered_aggregate_func_names:
+                function(self.windows, self.aggregate_results, self.config, self.image_data, **self.analysis_kwargs)
+
+        for attr in self.analysis_kwargs.get('aggregate_evict', []):
+            for window in self.windows:
+                if hasattr(window.results, attr):
+                    delattr(window.results, attr)
 
     def compute_single_window(self):
         """Define a single window that contains all parametric map windows for analysis, capturing the entire segmentation.

@@ -18,14 +18,14 @@ def philips_3d_config(analysis_path: str, **kwargs) -> RfAnalysisConfig:
     out.sampling_frequency = 4*out.center_frequency # Hz
 
     # Windowing parameters
-    out.ax_win_size = 10 # axial length per window (mm)
-    out.lat_win_size = 10 # lateral length per window (mm)
+    out.ax_win_size = 3 # axial length per window (mm)
+    out.lat_win_size = 3 # lateral length per window (mm)
     out.window_thresh = 0.95 # % of window area required to be considered in ROI
     out.axial_overlap = 0.5 # % of window overlap in axial direction
     out.lateral_overlap = 0.5 # % of window overlap in lateral direction
     
     # 3D scan parameters
-    out.cor_win_size = 20 # coronal length per window (mm)
+    out.cor_win_size = 2 # coronal length per window (mm)
     out.coronal_overlap = 0.5 # % of window overlap in coronal direction
 
     return out
