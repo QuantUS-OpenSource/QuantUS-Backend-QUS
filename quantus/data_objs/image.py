@@ -14,6 +14,7 @@ class UltrasoundRfImage:
         self.bmode: np.ndarray
         self.axial_res: float # mm/pix
         self.lateral_res: float # mm/pix
+        self.sampling_frequency: float = None # Hz; optional, set by loaders that know it (used by quantus.power_spectrum before a config exists)
         self.scan_name = Path(scan_path).stem
         self.phantom_name = Path(phantom_path).stem
         self.scan_path = scan_path

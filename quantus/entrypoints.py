@@ -8,6 +8,7 @@ from .analysis_config.utc_config.options import get_config_loaders, get_required
 from .analysis.options import get_analysis_types
 from .visualizations.options import get_visualization_types
 from .data_export.options import get_data_export_types
+from .reference_phantoms import expand_reference_phantom_kwargs
 
 DESCRIPTION = """
 QuantUS | Custom US Analysis Workflows
@@ -117,6 +118,8 @@ def analysis_step(analysis_type: str, image_data: UltrasoundRfImage, config: RfA
         ParamapAnalysisBase: Analysis object containing the results.
     """
     all_analysis_types, all_analysis_funcs = get_analysis_types()
+    # `reference_phantom: <name>` fills ref_atten*/ref_bsc_path/cirs_* from quantus/reference_phantoms
+    analysis_kwargs = expand_reference_phantom_kwargs(analysis_kwargs)
     
     # Find the analysis class
     try:

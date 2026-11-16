@@ -9,6 +9,7 @@ from .analysis_config.utc_config.options import get_config_loaders, config_loade
 from .analysis.options import get_analysis_types, analysis_args
 from .visualizations.options import get_visualization_types, visualization_args
 from .data_export.options import get_data_export_types, data_export_args
+from .reference_phantoms import expand_reference_phantom_kwargs
 
 DESCRIPTION = """
 QuantUS | Custom US Analysis Workflows
@@ -145,6 +146,8 @@ def core_pipeline(args) -> int:
         return 1
 
     # Check analysis setup
+    # `reference_phantom: <name>` fills ref_atten*/ref_bsc_path/cirs_* from quantus/reference_phantoms
+    args.analysis_kwargs = expand_reference_phantom_kwargs(args.analysis_kwargs)
     # A missing or empty analysis_funcs list runs no analysis functions
     args.analysis_funcs = getattr(args, 'analysis_funcs', None) or []
     if not len(args.analysis_funcs):
