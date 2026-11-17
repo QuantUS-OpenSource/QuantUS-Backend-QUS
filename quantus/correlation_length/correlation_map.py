@@ -18,8 +18,8 @@ from typing import Optional, Sequence
 import numpy as np
 
 from .correlation import (
-    _axial_centres, _ceil_count, _distance_mm, _measure_window, _mround, _odd_count, _prepare,
-    _sample_spacings_mm, positions_from_image, _frames_from_image,
+    _apply_preset, _axial_centres, _ceil_count, _central_region, _round_mm, _distance_mm, _measure_window, _mround,
+    _odd_count, _prepare, _sample_spacings_mm, positions_from_image, _frames_from_image,
 )
 
 
@@ -40,6 +40,7 @@ class CorrelationLengthMap:
     window_width_mm: float
     ax_window_factor: float = 10.0
     lat_window_factor: float = 5.0
+    lateral_fraction: Optional[float] = None  # windows limited to the central fraction of the A-lines
 
     @property
     def n_frames(self) -> int:
@@ -110,16 +111,18 @@ class CorrelationLengthMap:
         """
         region = self.region_mask(depth_range_mm, lateral_range_mm)
 
-        def largest(counts, spacing):
+        def largest(counts, length_mm, factor):
+            # the largest whole-number window, its mm size (factor x mean length, nearest 0.1 mm)
+            # and where it is
             counts = np.where(region, counts, np.nan)
             if not np.any(np.isfinite(counts)):
                 return np.nan, np.nan, np.nan, np.nan
             i = np.unravel_index(int(np.nanargmax(counts)), counts.shape)
-            return (float(counts[i]), float(counts[i] * spacing[i]),
+            return (float(counts[i]), float(_round_mm(factor * length_mm[i])),
                     float(self.depth_mm[i]), float(self.lateral_mm[i]))
 
-        ax = largest(self.recommended_ax_window_samples, self.ax_spacing_mm)
-        lat = largest(self.recommended_lat_window_lines, self.lat_spacing_mm)
+        ax = largest(self.recommended_ax_window_samples, self.ax_mean_mm, self.ax_window_factor)
+        lat = largest(self.recommended_lat_window_lines, self.lat_mean_mm, self.lat_window_factor)
         measured = region & (np.isfinite(self.ax_mean_samples) | np.isfinite(self.lat_mean_lines))
         if not measured.any():
             raise ValueError("No measured windows in the requested region.")
@@ -137,10 +140,10 @@ class CorrelationLengthMap:
         where = "the whole map" if depth_range_mm is None and lateral_range_mm is None else "the region"
         return (f"Window for {where} (depth {d0:.1f}-{d1:.1f} mm, lateral {x0:.1f} to {x1:.1f} mm, "
                 f"{self.n_frames} frames, threshold {self.threshold:g}): "
-                f"axial {w['ax_window_samples']:.0f} samples ({w['ax_window_mm']:.2f} mm, "
+                f"axial {w['ax_window_samples']:.0f} samples ({w['ax_window_mm']:.1f} mm, "
                 f"{w['ax_window_factor']:g}x length, max at depth {w['ax_at_depth_mm']:.1f} mm / "
                 f"lateral {w['ax_at_lateral_mm']:.1f} mm) x "
-                f"lateral {w['lat_window_lines']:.0f} A-lines ({w['lat_window_mm']:.2f} mm, "
+                f"lateral {w['lat_window_lines']:.0f} A-lines ({w['lat_window_mm']:.1f} mm, "
                 f"{w['lat_window_factor']:g}x width, max at depth {w['lat_at_depth_mm']:.1f} mm / "
                 f"lateral {w['lat_at_lateral_mm']:.1f} mm)")
 
@@ -166,12 +169,19 @@ def correlation_length_map(rf_frames: np.ndarray, axial_position_mm: np.ndarray,
                            ax_start_mm: Optional[float] = None, ax_end_mm: Optional[float] = None,
                            n_ax_locations: Optional[int] = None, lat_step_lines: Optional[int] = None,
                            threshold: float = 0.5, ax_window_factor: float = 10.0,
-                           lat_window_factor: float = 5.0) -> CorrelationLengthMap:
+                           lat_window_factor: float = 5.0,
+                           lateral_fraction: Optional[float] = None, depth_range_mm=None) -> CorrelationLengthMap:
     """Correlation lengths on a grid of window positions across the image.
 
     Same inputs as correlation_lengths(), plus:
         lat_step_lines: A-lines between window centres laterally; None -> half the narrowest
             measurement window (in lines) over the depths, i.e. a centre every half window.
+        lateral_fraction: only measure windows lying entirely inside the central fraction of
+            the A-lines (e.g. 0.5); None -> anywhere the window fits in the image. Unlike
+            correlation_lengths() (which always keeps the centre window), a region narrower
+            than one window leaves the map empty.
+        depth_range_mm: (top, bottom) window-edge depth limits on the centre line, as in
+            correlation_lengths() (rows are shared by all columns).
     """
     env, axial, lateral = _prepare(rf_frames, axial_position_mm, lateral_position_mm)
     n_frames, n_samples, n_lines = env.shape
@@ -181,7 +191,7 @@ def correlation_length_map(rf_frames: np.ndarray, axial_position_mm: np.ndarray,
     win_ax = _odd_count(window_length_mm, d_ax_centre)
     half_ax = (win_ax - 1) // 2
     rows = _axial_centres(axial[:, mid0], n_samples, half_ax, window_length_mm,
-                          ax_start_mm, ax_end_mm, n_ax_locations) - 1
+                          ax_start_mm, ax_end_mm, n_ax_locations, depth_range_mm) - 1
 
     # Lateral window size per row (line spacing at that depth on the centre line).
     win_lines = np.array([_odd_count(window_width_mm, _distance_mm(axial, lateral, (r, mid0), (r, mid0 - 1)))
@@ -193,7 +203,8 @@ def correlation_length_map(rf_frames: np.ndarray, axial_position_mm: np.ndarray,
     step = lat_step_lines if lat_step_lines is not None else max(1, int(np.min(half_lat)))
     if step < 1:
         raise ValueError("lat_step_lines must be >= 1")
-    cols = np.concatenate([np.arange(mid0, -1, -step)[::-1], np.arange(mid0 + step, n_lines, step)])
+    first, last = _central_region(n_lines, mid0, lateral_fraction)
+    cols = np.concatenate([np.arange(mid0, first - 1, -step)[::-1], np.arange(mid0 + step, last + 1, step)])
 
     shape = (len(rows), len(cols))
     ax_corr = np.full(shape + (n_frames,), np.nan)
@@ -203,8 +214,8 @@ def correlation_length_map(rf_frames: np.ndarray, axial_position_mm: np.ndarray,
     for i, (row, h) in enumerate(zip(rows, half_lat)):
         for j, col in enumerate(cols):
             ax_spacing[i, j], lat_spacing[i, j] = _sample_spacings_mm(axial, lateral, row, col)
-            if col - h < 0 or col + h + 1 > n_lines:
-                continue  # full window doesn't fit at this lateral position
+            if col - h < first or col + h > last:
+                continue  # full window doesn't fit in the image / central region at this position
             lat_corr[i, j], ax_half, _, _ = _measure_window(
                 env, row - half_ax, row + half_ax + 1, col - h, col + h + 1,
                 ax_spacing[i, j], lat_spacing[i, j], threshold)
@@ -216,13 +227,15 @@ def correlation_length_map(rf_frames: np.ndarray, axial_position_mm: np.ndarray,
         window_samples=win_ax, window_lines=win_lines, threshold=threshold,
         window_length_mm=window_length_mm, window_width_mm=window_width_mm,
         ax_window_factor=ax_window_factor, lat_window_factor=lat_window_factor,
+        lateral_fraction=lateral_fraction,
     )
 
 
 def correlation_length_map_from_image(image_data, source: str = "phantom", frames: Optional[Sequence[int]] = None,
-                                      **kwargs) -> CorrelationLengthMap:
-    """correlation_length_map() on a loaded QuantUS UltrasoundRfImage (source / frames as in
-    correlation_lengths_from_image)."""
+                                      preset: Optional[str] = None, **kwargs) -> CorrelationLengthMap:
+    """correlation_length_map() on a loaded QuantUS UltrasoundRfImage (source / frames / preset as
+    in correlation_lengths_from_image)."""
+    kwargs = _apply_preset(preset, kwargs)
     rf = _frames_from_image(image_data, source, frames)
     axial, lateral = positions_from_image(image_data, rf.shape[1], rf.shape[2])
     return correlation_length_map(rf, axial, lateral, **kwargs)
@@ -271,7 +284,8 @@ def plot_correlation_length_map(result: CorrelationLengthMap, title: str = "Corr
         ax.set_ylabel("Depth (mm)")
         ax.invert_yaxis()
         ax.set_aspect("equal", adjustable="box")
+    check = "" if result.lateral_fraction is None else f"; central {result.lateral_fraction:g} of the image"
     fig.suptitle(f"{title} ({result.n_frames} frames, threshold {result.threshold:g}; "
-                 f"measurement window {result.window_length_mm:g} x {result.window_width_mm:g} mm)")
+                 f"measurement window {result.window_length_mm:g} x {result.window_width_mm:g} mm{check})")
     fig.tight_layout()
     return fig

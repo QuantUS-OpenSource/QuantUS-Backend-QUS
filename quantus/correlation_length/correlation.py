@@ -6,7 +6,8 @@ each other; see README.md for the known differences we may want to change.
 
 Method, per frame and per depth:
   1. Detrend each A-line of the RF frame (linear), take the Hilbert envelope.
-  2. Take a window (window_length_mm deep x window_width_mm wide) centred on the middle line.
+  2. Take a window (window_length_mm deep x window_width_mm wide) centred on the middle line
+     (or, with lateral_fraction, on several lines across the central part of the image).
   3. Detrend each A-line of the window envelope, add its mean back, square -> intensity.
   4. Lateral: correlation coefficient between A-line c and A-line c+shift (over depth),
      averaged over c. Axial: same between row r and row r+shift (over A-lines).
@@ -16,11 +17,37 @@ Method, per frame and per depth:
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
 import numpy as np
 from scipy.signal import detrend, hilbert
+
+# Per-probe settings for correlation_lengths*_from_image(..., preset=...). Any of these can be
+# overridden by passing the same kwarg. depth_range_mm: every measurement window lies entirely
+# between these depths on the centre line (window edges; the 5 mm top keeps the transducer
+# ring-down out). Off-centre windows use the same sample rows, i.e. the same range from the probe
+# face, so on a sector probe their Cartesian depth is a little shallower;
+# lateral_fraction: windows across the central half of the A-lines, away from the image edges.
+PROBE_PRESETS = {
+    "C3":  dict(depth_range_mm=(5.0, 95.0), window_length_mm=10.0, window_width_mm=10.0,
+                threshold=0.2, lateral_fraction=0.5),
+    "L15": dict(depth_range_mm=(5.0, 35.0), window_length_mm=5.0, window_width_mm=5.0,
+                threshold=0.2, lateral_fraction=0.5),
+    "L20": dict(depth_range_mm=(5.0, 16.0), window_length_mm=3.0, window_width_mm=3.0,
+                threshold=0.2, lateral_fraction=0.5),
+}
+
+
+def _apply_preset(preset: Optional[str], kwargs: dict) -> dict:
+    """Preset values, overridden by any explicitly passed kwargs."""
+    if preset is None:
+        return kwargs
+    if preset not in PROBE_PRESETS:
+        raise ValueError(f"Unknown preset {preset!r}; choose from {sorted(PROBE_PRESETS)}")
+    return {**PROBE_PRESETS[preset], **kwargs}
+
 
 def _mround(x: float) -> int:
     """MATLAB round (half away from zero); Python's round() is banker's rounding."""
@@ -30,8 +57,8 @@ def _mround(x: float) -> int:
 @dataclass
 class CorrelationLengths:
     depths_mm: np.ndarray          # (n_depths,) depth of each window centre
-    ax_corr_mm: np.ndarray         # (n_depths, n_frames) full axial correlation length
-    lat_corr_mm: np.ndarray        # (n_depths, n_frames) lateral correlation width
+    ax_corr_mm: np.ndarray         # (n_depths, n_measurements) full axial correlation length
+    lat_corr_mm: np.ndarray        # (n_depths, n_measurements) lateral correlation width
     ax_spacing_mm: float           # axial sample spacing
     lat_spacing_mm: np.ndarray     # (n_depths,) A-line spacing at each depth
     window_samples: np.ndarray     # (n_depths,) axial samples in the measurement window
@@ -41,43 +68,73 @@ class CorrelationLengths:
     window_width_mm: float
     ax_window_factor: float = 10.0  # recommended axial window = factor x mean axial length
     lat_window_factor: float = 5.0  # recommended lateral window = factor x mean lateral width
-    lat_corr_curves: Optional[np.ndarray] = field(default=None, repr=False)  # (n_depths, n_frames, n_shifts+1)
+    lat_corr_curves: Optional[np.ndarray] = field(default=None, repr=False)  # (n_depths, n_measurements) curves
     ax_corr_curves: Optional[np.ndarray] = field(default=None, repr=False)
+    # Measurements per depth = frames x lateral window positions. Columns are frame-major:
+    # column f * max_positions + p is frame f at position p (NaN where that depth has fewer
+    # positions). None -> one position (the centre line): columns are frames.
+    frames: Optional[int] = None
+    n_positions: Optional[np.ndarray] = None   # (n_depths,) lateral positions measured at each depth
+    lateral_fraction: Optional[float] = None
+    window_mm_step: float = 0.1                # recommended windows in mm round to the nearest step
 
     @property
     def n_frames(self) -> int:
-        return self.ax_corr_mm.shape[1]
+        return self.frames if self.frames is not None else self.ax_corr_mm.shape[1]
+
+    @property
+    def n_measurements(self) -> np.ndarray:
+        """(n_depths,) frames x lateral positions measured at each depth."""
+        positions = self.n_positions if self.n_positions is not None else np.ones(len(self.depths_mm), int)
+        return self.n_frames * positions
+
+    @staticmethod
+    def _mean(x: np.ndarray) -> np.ndarray:
+        """Mean over the measurements at each depth; NaN where there are none (no warning)."""
+        with np.errstate(invalid="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            return np.nanmean(x, axis=1)
+
+    @staticmethod
+    def _std(x: np.ndarray) -> np.ndarray:
+        """SD (ddof 1) over the measurements at each depth: 0 with one measurement, NaN with none.
+        Counted per depth, since with lateral_fraction depths can have different numbers."""
+        n = np.sum(np.isfinite(x), axis=1)
+        with np.errstate(invalid="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            sd = np.nanstd(x, axis=1, ddof=1)
+        return np.where(n >= 2, sd, np.where(n == 1, 0.0, np.nan))
 
     @property
     def ax_mean_mm(self) -> np.ndarray:
-        return np.nanmean(self.ax_corr_mm, axis=1)
+        return self._mean(self.ax_corr_mm)
 
     @property
     def ax_std_mm(self) -> np.ndarray:
-        return np.nanstd(self.ax_corr_mm, axis=1, ddof=1) if self.n_frames > 1 else np.zeros(len(self.depths_mm))
+        return self._std(self.ax_corr_mm)
 
     @property
     def lat_mean_mm(self) -> np.ndarray:
-        return np.nanmean(self.lat_corr_mm, axis=1)
+        return self._mean(self.lat_corr_mm)
 
     @property
     def lat_std_mm(self) -> np.ndarray:
-        return np.nanstd(self.lat_corr_mm, axis=1, ddof=1) if self.n_frames > 1 else np.zeros(len(self.depths_mm))
+        return self._std(self.lat_corr_mm)
 
     # Lengths in samples (axial) and A-lines (lateral): the units the QUS windows are built in.
     @property
     def ax_corr_samples(self) -> np.ndarray:
-        """(n_depths, n_frames) full axial correlation length in samples."""
+        """(n_depths, n_measurements) full axial correlation length in samples."""
         return self.ax_corr_mm / self.ax_spacing_mm
 
     @property
     def lat_corr_lines(self) -> np.ndarray:
-        """(n_depths, n_frames) lateral correlation width in A-lines (line spacing at that depth)."""
+        """(n_depths, n_measurements) lateral correlation width in A-lines (line spacing at that depth)."""
         return self.lat_corr_mm / self.lat_spacing_mm[:, None]
 
     @property
     def ax_mean_samples(self) -> np.ndarray:
-        return np.nanmean(self.ax_corr_samples, axis=1)
+        return self._mean(self.ax_corr_samples)
 
     @property
     def ax_std_samples(self) -> np.ndarray:
@@ -85,15 +142,16 @@ class CorrelationLengths:
 
     @property
     def lat_mean_lines(self) -> np.ndarray:
-        return np.nanmean(self.lat_corr_lines, axis=1)
+        return self._mean(self.lat_corr_lines)
 
     @property
     def lat_std_lines(self) -> np.ndarray:
         return self.lat_std_mm / self.lat_spacing_mm
 
-    # Recommended QUS window at each depth: factor x mean length, rounded UP to a whole number
-    # of samples / A-lines (NaN where the length is undefined). The mm values are those whole
-    # numbers times the spacing, so mm and counts always describe the same window.
+    # Recommended QUS window at each depth: factor x mean length (NaN where the length is
+    # undefined), in two forms:
+    #   - samples / A-lines, rounded UP to a whole number;
+    #   - mm, rounded to the nearest window_mm_step (0.1 mm), from factor x mean length in mm.
     # ax_window_factor / lat_window_factor are inputs (correlation_lengths kwargs) and can also
     # be changed on the result afterwards; these recompute.
     @property
@@ -106,43 +164,57 @@ class CorrelationLengths:
 
     @property
     def recommended_ax_window_mm(self) -> np.ndarray:
-        return self.recommended_ax_window_samples * self.ax_spacing_mm
+        return _round_mm(self.ax_window_factor * self.ax_mean_mm, self.window_mm_step)
 
     @property
     def recommended_lat_window_mm(self) -> np.ndarray:
-        return self.recommended_lat_window_lines * self.lat_spacing_mm
+        return _round_mm(self.lat_window_factor * self.lat_mean_mm, self.window_mm_step)
 
     def recommended_window(self) -> dict:
         """One window for the whole checked depth range: the largest per-depth recommendation.
 
-        Axial in samples (and mm), lateral in A-lines (and mm at the depth where the maximum
-        occurs; on a curvilinear probe the line spacing grows with depth), plus those depths.
+        Axial and lateral each as a whole number of samples / A-lines and in mm (nearest
+        window_mm_step), each with the depth where its maximum occurs (on a curvilinear probe the
+        line spacing grows with depth, so the lateral mm and A-line maxima can be at different
+        depths).
         """
-        def largest(counts, spacing_mm):
-            if not np.any(np.isfinite(counts)):
-                return np.nan, np.nan, np.nan
-            i = int(np.nanargmax(counts))
-            spacing = spacing_mm[i] if np.ndim(spacing_mm) else spacing_mm
-            return float(counts[i]), float(counts[i] * spacing), float(self.depths_mm[i])
+        def largest(values):
+            if not np.any(np.isfinite(values)):
+                return np.nan, np.nan
+            i = int(np.nanargmax(values))
+            return float(values[i]), float(self.depths_mm[i])
 
-        ax_n, ax_mm, ax_depth = largest(self.recommended_ax_window_samples, self.ax_spacing_mm)
-        lat_n, lat_mm, lat_depth = largest(self.recommended_lat_window_lines, self.lat_spacing_mm)
+        ax_n, ax_depth = largest(self.recommended_ax_window_samples)
+        lat_n, lat_depth = largest(self.recommended_lat_window_lines)
+        ax_mm, ax_mm_depth = largest(self.recommended_ax_window_mm)
+        lat_mm, lat_mm_depth = largest(self.recommended_lat_window_mm)
         return {
-            "ax_window_samples": ax_n, "ax_window_mm": ax_mm, "ax_at_depth_mm": ax_depth,
-            "lat_window_lines": lat_n, "lat_window_mm": lat_mm, "lat_at_depth_mm": lat_depth,
+            "ax_window_samples": ax_n, "ax_at_depth_mm": ax_depth,
+            "ax_window_mm": ax_mm, "ax_mm_at_depth_mm": ax_mm_depth,
+            "lat_window_lines": lat_n, "lat_at_depth_mm": lat_depth,
+            "lat_window_mm": lat_mm, "lat_mm_at_depth_mm": lat_mm_depth,
             "depth_range_mm": (float(np.min(self.depths_mm)), float(np.max(self.depths_mm))),
             "ax_window_factor": self.ax_window_factor, "lat_window_factor": self.lat_window_factor,
         }
+
+    def _describe_data(self) -> str:
+        if self.n_positions is None:
+            return f"{self.n_frames} frames"
+        lo, hi = int(np.min(self.n_positions)), int(np.max(self.n_positions))
+        pos = f"{lo}" if lo == hi else f"{lo}-{hi}"
+        return (f"{self.n_frames} frames x {pos} lateral positions in the central "
+                f"{100 * self.lateral_fraction:g}% of the image")
 
     def describe_window(self) -> str:
         """One-line statement of the whole-range window (see recommended_window)."""
         w = self.recommended_window()
         d0, d1 = w["depth_range_mm"]
-        return (f"Window for {d0:.1f}-{d1:.1f} mm ({self.n_frames} frames, threshold {self.threshold:g}): "
-                f"axial {w['ax_window_samples']:.0f} samples ({w['ax_window_mm']:.2f} mm, "
-                f"{w['ax_window_factor']:g}x length, max at {w['ax_at_depth_mm']:.1f} mm) x "
-                f"lateral {w['lat_window_lines']:.0f} A-lines ({w['lat_window_mm']:.2f} mm, "
-                f"{w['lat_window_factor']:g}x width, max at {w['lat_at_depth_mm']:.1f} mm)")
+        return (f"Window for {d0:.1f}-{d1:.1f} mm ({self._describe_data()}, threshold {self.threshold:g}): "
+                f"axial {w['ax_window_mm']:.1f} mm / {w['ax_window_samples']:.0f} samples "
+                f"({w['ax_window_factor']:g}x length, max at {w['ax_mm_at_depth_mm']:.1f} mm) x "
+                f"lateral {w['lat_window_mm']:.1f} mm (max at {w['lat_mm_at_depth_mm']:.1f} mm) / "
+                f"{w['lat_window_lines']:.0f} A-lines (max at {w['lat_at_depth_mm']:.1f} mm; "
+                f"{w['lat_window_factor']:g}x width)")
 
     def to_table(self):
         """One row per depth: lengths and recommended windows in samples / A-lines and mm (pandas DataFrame)."""
@@ -161,7 +233,8 @@ class CorrelationLengths:
             "ax_window_mm": self.recommended_ax_window_mm,
             f"lat_window_lines ({self.lat_window_factor:g}x)": self.recommended_lat_window_lines,
             "lat_window_mm": self.recommended_lat_window_mm,
-            "n_frames": np.sum(np.isfinite(self.lat_corr_mm), axis=1),
+            # measurements (frames x lateral positions) at this depth that gave a lateral width
+            "n_measurements": np.sum(np.isfinite(self.lat_corr_mm), axis=1),
         })
 
 
@@ -169,6 +242,15 @@ def _ceil_count(x: np.ndarray) -> np.ndarray:
     """Round up to whole samples / lines, keeping NaN (tolerates float noise like 5.0000000001)."""
     x = np.asarray(x, dtype=float)
     return np.where(np.isfinite(x), np.ceil(x - 1e-9), np.nan)
+
+
+def _round_mm(x: np.ndarray, step: float = 0.1) -> np.ndarray:
+    """Round to the nearest `step` mm (half up), keeping NaN; the result is cleaned of float
+    noise (e.g. 6.1000000000000005 -> 6.1)."""
+    x = np.asarray(x, dtype=float)
+    n = np.floor(x / step + 0.5 + 1e-9)
+    decimals = max(0, int(np.ceil(-np.log10(step))) + 1)
+    return np.where(np.isfinite(x), np.round(n * step, decimals), np.nan)
 
 
 def envelope_frames(rf_frames: np.ndarray) -> np.ndarray:
@@ -237,11 +319,27 @@ def _odd_count(length_mm: float, spacing_mm: float) -> int:
 
 def _axial_centres(centre_ax: np.ndarray, n_samples: int, half_ax: int, window_length_mm: float,
                    ax_start_mm: Optional[float], ax_end_mm: Optional[float],
-                   n_ax_locations: Optional[int]) -> np.ndarray:
+                   n_ax_locations: Optional[int], depth_range_mm=None) -> np.ndarray:
     """Window-centre rows (1-based, as MATLAB): the sample nearest each requested depth on the
     centre line, kept inside the image so a full window fits; None -> first / last full window.
+    depth_range_mm (top, bottom): additionally, every window lies entirely inside it on the
+    centre line (top sample >= top, bottom sample <= bottom; either may be None).
     n_ax_locations None -> a centre every half window; spacing at least 1 sample."""
     first_1, last_1 = half_ax + 1, n_samples - half_ax
+    if depth_range_mm is not None:
+        top, bottom = depth_range_mm
+        rows_1 = np.arange(1, n_samples + 1)
+        ok = (rows_1 >= first_1) & (rows_1 <= last_1)
+        tops, bottoms = np.full(n_samples, np.nan), np.full(n_samples, np.nan)
+        tops[ok] = centre_ax[rows_1[ok] - 1 - half_ax]
+        bottoms[ok] = centre_ax[rows_1[ok] - 1 + half_ax]
+        if top is not None:
+            ok &= tops >= top - 1e-9
+        if bottom is not None:
+            ok &= bottoms <= bottom + 1e-9
+        if not ok.any():
+            raise ValueError(f"No full {window_length_mm:g} mm window fits inside depth_range_mm={depth_range_mm}.")
+        first_1, last_1 = int(rows_1[ok][0]), int(rows_1[ok][-1])
     start_1 = first_1 if ax_start_mm is None else max(int(np.argmin(np.abs(centre_ax - ax_start_mm))) + 1, first_1)
     end_1 = last_1 if ax_end_mm is None else min(int(np.argmin(np.abs(centre_ax - ax_end_mm))) + 1, last_1)
     if end_1 < start_1:
@@ -252,6 +350,35 @@ def _axial_centres(centre_ax: np.ndarray, n_samples: int, half_ax: int, window_l
     else:
         step = max(1, _mround((end_1 - start_1 + 1) / n_ax_locations))
     return np.arange(start_1, end_1 + 1, step)
+
+
+def _central_region(n_lines: int, mid0: int, lateral_fraction: Optional[float]):
+    """(first, last) A-line (0-based, inclusive) of the central lateral_fraction of the image,
+    symmetric about the centre line; None -> the whole image."""
+    if lateral_fraction is None:
+        return 0, n_lines - 1
+    if not 0 < lateral_fraction <= 1:
+        raise ValueError("lateral_fraction must be in (0, 1]")
+    half = int(np.floor(n_lines * lateral_fraction / 2))
+    return max(0, mid0 - half), min(n_lines - 1, mid0 + half)
+
+
+def _lateral_positions(mid0: int, half_lat: int, first: int, last: int, step: Optional[int] = None) -> np.ndarray:
+    """Window-centre A-lines inside [first, last]: the centre line, then every `step` lines
+    (default half a window) either side while the whole window stays inside."""
+    step = max(1, half_lat) if step is None else step
+    cols = [mid0]
+    k = 1
+    while True:
+        added = False
+        for c in (mid0 - k * step, mid0 + k * step):
+            if c - half_lat >= first and c + half_lat <= last:
+                cols.append(c)
+                added = True
+        if not added:
+            break
+        k += 1
+    return np.array(sorted(cols))
 
 
 def _measure_window(env: np.ndarray, r0: int, r1: int, c0: int, c1: int, d_ax: float, d_lat: float,
@@ -305,9 +432,11 @@ def correlation_lengths(rf_frames: np.ndarray, axial_position_mm: np.ndarray, la
                         ax_start_mm: Optional[float] = None, ax_end_mm: Optional[float] = None,
                         n_ax_locations: Optional[int] = None,
                         threshold: float = 0.5, ax_window_factor: float = 10.0, lat_window_factor: float = 5.0,
+                        lateral_fraction: Optional[float] = None, depth_range_mm=None,
                         keep_curves: bool = False) -> CorrelationLengths:
-    """Axial and lateral correlation lengths vs. depth on the centre A-line (port of
-    CalcAxLatCorrelationCoeffCurves.m). correlation_length_map() does the same across the image.
+    """Axial and lateral correlation lengths vs. depth (port of CalcAxLatCorrelationCoeffCurves.m),
+    on the centre A-line or averaged across the central part of the image.
+    correlation_length_map() keeps every lateral position separate instead.
 
     Args:
         rf_frames: RF data, (n_samples, n_lines) or (n_frames, n_samples, n_lines), pre-scan-conversion.
@@ -325,7 +454,16 @@ def correlation_lengths(rf_frames: np.ndarray, axial_position_mm: np.ndarray, la
         threshold: correlation coefficient that defines the length (default 0.5).
         ax_window_factor, lat_window_factor: multipliers for the recommended QUS window
             (MATLAB: axial 10x, lateral 0.5*10 = 5x).
-        keep_curves: also return the mean correlation-vs-shift curve for every depth/frame.
+        depth_range_mm: (top, bottom) in mm: every measurement window lies entirely inside this
+            depth range on the centre line (window edges, not centres -- e.g. (5, 95) keeps the
+            ring-down above 5 mm out of every window). Combines with ax_start_mm / ax_end_mm
+            (the stricter limit wins); None (default): no limit.
+        lateral_fraction: None (default, as MATLAB): one window per depth, centred on the middle
+            A-line. A fraction such as 0.5: windows every half window across the central
+            fraction of the A-lines (always including the centre line; only positions whose
+            whole window lies inside that region, the centre window always), and every frame at
+            every position counts as one measurement in the mean and SD at that depth.
+        keep_curves: also return the mean correlation-vs-shift curve for every depth/measurement.
     """
     env, axial, lateral = _prepare(rf_frames, axial_position_mm, lateral_position_mm)
     n_frames, n_samples, n_lines = env.shape
@@ -338,14 +476,13 @@ def correlation_lengths(rf_frames: np.ndarray, axial_position_mm: np.ndarray, la
     win_ax = _odd_count(window_length_mm, d_ax)
     half_ax = (win_ax - 1) // 2
     ax_locs_1 = _axial_centres(centre_ax, n_samples, half_ax, window_length_mm,
-                               ax_start_mm, ax_end_mm, n_ax_locations)
+                               ax_start_mm, ax_end_mm, n_ax_locations, depth_range_mm)
+    first, last = _central_region(n_lines, mid0, lateral_fraction)
 
     n_depths = len(ax_locs_1)
-    ax_corr = np.full((n_depths, n_frames), np.nan)
-    lat_corr = np.full((n_depths, n_frames), np.nan)
     lat_spacing = np.full(n_depths, np.nan)
     win_lines_all = np.zeros(n_depths, dtype=int)
-    lat_curves, ax_curves = [], []
+    per_depth = []  # (cols, lat (frames, positions), ax (frames, positions), lat curves, ax curves)
 
     for k, loc_1 in enumerate(ax_locs_1):
         row = loc_1 - 1
@@ -354,15 +491,40 @@ def correlation_lengths(rf_frames: np.ndarray, axial_position_mm: np.ndarray, la
         win_lat = _odd_count(window_width_mm, d_lat)
         win_lines_all[k] = win_lat
         half_lat = (win_lat - 1) // 2
-        c0, c1 = mid0 - half_lat, mid0 + half_lat + 1
-        if c0 < 0 or c1 > n_lines:
+        if mid0 - half_lat < 0 or mid0 + half_lat + 1 > n_lines:
             raise ValueError(f"Window at depth index {loc_1} needs {win_lat} A-lines but only {n_lines} exist; "
                              "reduce window_width_mm.")
-        lat_corr[k], ax_corr[k], lat_k, ax_k = _measure_window(
-            env, row - half_ax, row + half_ax + 1, c0, c1, d_ax, d_lat, threshold)
-        if keep_curves:
-            lat_curves.append(lat_k)
-            ax_curves.append(ax_k)
+        cols = _lateral_positions(mid0, half_lat, first, last) if lateral_fraction is not None else np.array([mid0])
+        lat_k = np.full((n_frames, len(cols)), np.nan)
+        ax_k = np.full((n_frames, len(cols)), np.nan)
+        lat_c, ax_c = [], []
+        for p, col in enumerate(cols):
+            lat_k[:, p], ax_k[:, p], lc, ac = _measure_window(
+                env, row - half_ax, row + half_ax + 1, col - half_lat, col + half_lat + 1, d_ax,
+                _distance_mm(axial, lateral, (row, col), (row, col - 1 if col > 0 else col + 1)), threshold)
+            lat_c.append(lc)
+            ax_c.append(ac)
+        per_depth.append((cols, lat_k, ax_k, lat_c, ax_c))
+
+    # (n_depths, n_frames * max_positions), frame-major, NaN-padded where a depth has fewer positions
+    max_pos = max(len(c) for c, *_ in per_depth)
+    ax_corr = np.full((n_depths, n_frames, max_pos), np.nan)
+    lat_corr = np.full((n_depths, n_frames, max_pos), np.nan)
+    for k, (cols, lat_k, ax_k, _, _) in enumerate(per_depth):
+        lat_corr[k, :, :len(cols)] = lat_k
+        ax_corr[k, :, :len(cols)] = ax_k
+    ax_corr = ax_corr.reshape(n_depths, -1)
+    lat_corr = lat_corr.reshape(n_depths, -1)
+
+    curves = {}
+    if keep_curves:
+        for name, idx in (("lat", 3), ("ax", 4)):
+            arr = np.empty((n_depths, n_frames * max_pos), dtype=object)
+            for k, d in enumerate(per_depth):
+                for p, frame_curves in enumerate(d[idx]):
+                    for f, c in enumerate(frame_curves):
+                        arr[k, f * max_pos + p] = c
+            curves[name] = arr
 
     return CorrelationLengths(
         depths_mm=centre_ax[ax_locs_1 - 1],  # depth of each window centre (MATLAB: CentreAx(AxialLocations))
@@ -377,8 +539,11 @@ def correlation_lengths(rf_frames: np.ndarray, axial_position_mm: np.ndarray, la
         window_width_mm=window_width_mm,
         ax_window_factor=ax_window_factor,
         lat_window_factor=lat_window_factor,
-        lat_corr_curves=np.array(lat_curves, dtype=object) if keep_curves else None,
-        ax_corr_curves=np.array(ax_curves, dtype=object) if keep_curves else None,
+        lat_corr_curves=curves.get("lat"),
+        ax_corr_curves=curves.get("ax"),
+        frames=n_frames,
+        n_positions=np.array([len(c) for c, *_ in per_depth]) if lateral_fraction is not None else None,
+        lateral_fraction=lateral_fraction,
     )
 
 
@@ -415,15 +580,18 @@ def positions_from_image(image_data, n_samples: int, n_lines: int):
 
 
 def correlation_lengths_from_image(image_data, source: str = "phantom", frames: Optional[Sequence[int]] = None,
-                                   **kwargs) -> CorrelationLengths:
+                                   preset: Optional[str] = None, **kwargs) -> CorrelationLengths:
     """correlation_lengths() on a loaded QuantUS UltrasoundRfImage.
 
     source: "phantom" (reference phantom RF, the usual choice for picking window sizes) or "scan".
     frames: which frames to use (default all available; for "phantom" this indexes the frames of
         all reference files, in upload order).
+    preset: probe name in PROBE_PRESETS ("C3", "L15", "L20") for its depth range, measurement
+        window, threshold and lateral region; explicitly passed kwargs override it.
     Remaining kwargs go to correlation_lengths (window_length_mm, window_width_mm, ax_start_mm,
-    ax_end_mm, n_ax_locations, threshold, ...).
+    ax_end_mm, n_ax_locations, threshold, lateral_fraction, ...).
     """
+    kwargs = _apply_preset(preset, kwargs)
     rf = _frames_from_image(image_data, source, frames)
     axial, lateral = positions_from_image(image_data, rf.shape[1], rf.shape[2])
     return correlation_lengths(rf, axial, lateral, **kwargs)
@@ -455,7 +623,7 @@ def plot_correlation_lengths(result: CorrelationLengths, title: str = "Correlati
         fig = plt.figure(figsize=(10, 8))
     axs = fig.subplots(2, 2)
     d = result.depths_mm
-    label = f"Mean ({result.n_frames} frames)"
+    label = f"Mean ({result._describe_data()})"
     for ax, mean, sd, color, name in (
         (axs[0, 0], result.lat_mean_lines, result.lat_std_lines, "goldenrod", "Lateral correlation width (A-lines)"),
         (axs[0, 1], result.ax_mean_samples, result.ax_std_samples, "darkcyan", "Axial correlation length (samples)"),
@@ -470,11 +638,11 @@ def plot_correlation_lengths(result: CorrelationLengths, title: str = "Correlati
     axs[1, 0].set_ylabel(f"Lateral window (A-lines) = ⌈{result.lat_window_factor:g} × width⌉")
     axs[1, 1].plot(d, result.recommended_ax_window_samples, color="darkcyan", marker="o", drawstyle="steps-mid")
     axs[1, 1].set_ylabel(f"Axial window (samples) = ⌈{result.ax_window_factor:g} × length⌉")
-    for ax, n, mm, unit in ((axs[1, 0], w["lat_window_lines"], w["lat_window_mm"], "A-lines"),
-                            (axs[1, 1], w["ax_window_samples"], w["ax_window_mm"], "samples")):
+    for ax, n, mm, unit, unit_mm in ((axs[1, 0], w["lat_window_lines"], w["lat_window_mm"], "A-lines", "max "),
+                                     (axs[1, 1], w["ax_window_samples"], w["ax_window_mm"], "samples", "")):
         if np.isfinite(n):  # the single whole-range window (largest per-depth recommendation)
             ax.axhline(n, color="black", linestyle="--", linewidth=1,
-                       label=f"Whole range: {n:.0f} {unit} ({mm:.2f} mm)")
+                       label=f"Whole range: {n:.0f} {unit} ({unit_mm}{mm:.1f} mm)")
             ax.legend(loc="lower right", fontsize=8)
     for ax in axs.flat:
         ax.set_xlabel("Depth (mm)")

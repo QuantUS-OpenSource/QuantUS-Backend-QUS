@@ -35,6 +35,33 @@ plot_correlation_length_map(cmap, depth_range_mm=(10, 95), lateral_range_mm=(-40
 cmap.to_table()                                                           # one row per measured window
 ```
 
+## Probe presets and the central region
+```python
+res = correlation_lengths_from_image(image, preset="C3")                 # PROBE_PRESETS["C3"]
+res = correlation_lengths_from_image(image, preset="C3", threshold=0.5)  # explicit kwargs override the preset
+cmap = correlation_length_map_from_image(image, preset="L15")
+```
+`PROBE_PRESETS` (in `correlation.py`) holds, per probe, `depth_range_mm` (every measurement
+window lies entirely inside it on the centre line: window edges, not centres, so the 5 mm top
+keeps the ring-down out of every window; off-centre windows use the same sample rows, i.e. the
+same range from the probe face), the measurement window, the threshold (0.2) and
+`lateral_fraction` (0.5).
+Clarius `rf.yml` does not name the probe, so the preset is chosen by name.
+
+| Preset | Windows inside (mm) | Measurement window (mm) | Threshold | Lateral |
+|---|---|---|---|---|
+| C3  | 5-95 | 10 x 10 | 0.2 | central half |
+| L15 | 5-35 | 5 x 5   | 0.2 | central half |
+| L20 | 5-16 | 3 x 3   | 0.2 | central half |
+
+`lateral_fraction` (default `None`, as MATLAB: centre line only): windows every half window
+across the central fraction of the A-lines (always including the centre line; a position is
+used only if its whole window lies inside that region). Every frame at every position is one
+measurement in the mean / SD at that depth, which averages over more speckle while staying away
+from the image edges (sector walls on C3). `n_measurements` in `to_table()` counts those that
+gave a lateral width. With `keep_curves=True` the curves are a `(n_depths, n_frames x positions)`
+object array in the same frame-major order (None where a depth has fewer positions).
+
 The whole-image maximum is set by the single worst window, and walls, near-field
 reverberation or point targets give much longer correlation lengths than speckle (e.g. C3
 phantom: 660 samples axially at a side wall vs ~77 in the speckle). Restrict the region to the
@@ -53,8 +80,11 @@ speckle / ROI you will analyse.
   using the line spacing at that depth).
 - Recommended window = `ax_window_factor` (default 10) x axial mean and `lat_window_factor`
   (default 5, the MATLAB `0.5*10`) x lateral mean, **rounded up to a whole number** of samples /
-  A-lines (`recommended_ax_window_samples`, `recommended_lat_window_lines`); the `_mm` versions
-  are those whole numbers x the spacing. NaN where the length is undefined.
+  A-lines (`recommended_ax_window_samples`, `recommended_lat_window_lines`) and **to the nearest
+  0.1 mm** in mm (`recommended_ax_window_mm`, `recommended_lat_window_mm`; step
+  `window_mm_step`). NaN where the length is undefined. The whole-range window reports each
+  maximum with its depth (lateral mm and A-line maxima can be at different depths on a
+  curvilinear probe, whose line spacing grows with depth).
 
 ## Window centres (depths)
 - `ax_start_mm` / `ax_end_mm` snap to the nearest sample on the centre line, using the axial

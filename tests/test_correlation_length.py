@@ -35,9 +35,12 @@ def test_recommended_windows_round_up_to_whole_counts():
     assert np.isnan(r.recommended_ax_window_samples[2])
     # lateral 5 x [1.0, 1.5, 2.0] = [5, 7.5 -> 8, 10]
     np.testing.assert_array_equal(r.recommended_lat_window_lines, [5, 8, 10])
-    # mm are the whole counts x spacing
-    np.testing.assert_allclose(r.recommended_lat_window_mm, [5 * 0.26, 8 * 0.26, 10 * 0.26])
-    np.testing.assert_allclose(r.recommended_ax_window_mm[:2], [42 * 0.05, 60 * 0.05])
+    # mm: factor x mean length in mm, to the nearest 0.1 mm (5 x [0.26, 0.39, 0.52], 10 x [0.21, 0.30])
+    np.testing.assert_array_equal(r.recommended_lat_window_mm, [1.3, 2.0, 2.6])  # 1.95 rounds half up
+    np.testing.assert_array_equal(r.recommended_ax_window_mm[:2], [2.1, 3.0])
+    assert np.isnan(r.recommended_ax_window_mm[2])
+    r.window_mm_step = 0.5
+    np.testing.assert_array_equal(r.recommended_lat_window_mm, [1.5, 2.0, 2.5])
 
 
 def test_window_factors_are_inputs_and_recompute():
@@ -141,6 +144,75 @@ def _mid(n_lines):
     return int(np.sign(n_lines / 2) * np.floor(abs(n_lines / 2) + 0.5)) - 1
 
 
+def test_presets_fill_kwargs_and_explicit_kwargs_win():
+    from quantus.correlation_length import PROBE_PRESETS
+    from quantus.correlation_length.correlation import _apply_preset
+    assert {p: v["depth_range_mm"] for p, v in PROBE_PRESETS.items()} == {
+        "C3": (5.0, 95.0), "L15": (5.0, 35.0), "L20": (5.0, 16.0)}
+    assert all(v["lateral_fraction"] == 0.5 and v["threshold"] == 0.2 for v in PROBE_PRESETS.values())
+    k = _apply_preset("C3", {"threshold": 0.5})
+    assert k["threshold"] == 0.5 and k["depth_range_mm"] == (5.0, 95.0) and k["lateral_fraction"] == 0.5
+    assert _apply_preset(None, {"a": 1}) == {"a": 1}
+    with pytest.raises(ValueError, match="Unknown preset"):
+        _apply_preset("C5", {})
+
+
+def test_depth_range_keeps_whole_windows_inside():
+    rng = np.random.default_rng(9)
+    n_samples, n_lines = 600, 40
+    rf = rng.normal(size=(1, n_samples, n_lines))
+    axial, lateral = _positions(n_samples, n_lines, ax0=1.0)  # 0.05 mm samples from 1 mm
+    r = correlation_lengths(rf, axial, lateral, 4.0, 3.0, depth_range_mm=(5.0, 25.0))
+    half = (r.window_samples[0] - 1) // 2 * 0.05  # 81 samples -> 2 mm either side of the centre
+    assert r.depths_mm[0] - half >= 5.0 - 1e-9 and r.depths_mm[0] - half < 5.0 + 0.05
+    assert r.depths_mm[-1] + half <= 25.0 + 1e-9
+    # combined with centre limits, the stricter one wins
+    r2 = correlation_lengths(rf, axial, lateral, 4.0, 3.0, ax_start_mm=10.0, depth_range_mm=(5.0, 25.0))
+    assert np.isclose(r2.depths_mm[0], 10.0)
+    with pytest.raises(ValueError, match="depth_range_mm"):
+        correlation_lengths(rf, axial, lateral, 4.0, 3.0, depth_range_mm=(5.0, 7.0))
+
+
+def test_lateral_positions_stay_inside_the_central_region():
+    from quantus.correlation_length.correlation import _central_region, _lateral_positions
+    first, last = _central_region(192, 95, 0.5)
+    assert (first, last) == (47, 143)
+    cols = _lateral_positions(95, 10, first, last)  # 21-line window, a centre every 10 lines
+    assert 95 in cols and np.all(np.diff(cols) == 10)
+    assert cols.min() - 10 >= first and cols.max() + 10 <= last
+    assert list(_lateral_positions(95, 60, first, last)) == [95]  # window wider than the region: centre only
+    assert _central_region(192, 95, None) == (0, 191)
+    with pytest.raises(ValueError):
+        _central_region(192, 95, 0.0)
+
+
+def test_central_half_averages_frames_and_positions():
+    rng = np.random.default_rng(8)
+    n_samples, n_lines, n_frames = 500, 80, 2
+    rf = rng.normal(size=(n_frames, n_samples, n_lines))
+    axial, lateral = _positions(n_samples, n_lines)
+    centre = correlation_lengths(rf, axial, lateral, 3.0, 3.0, 5.0, 20.0, 4)
+    half = correlation_lengths(rf, axial, lateral, 3.0, 3.0, 5.0, 20.0, 4, lateral_fraction=0.5)
+    np.testing.assert_allclose(half.depths_mm, centre.depths_mm)
+    assert centre.n_positions is None and np.all(centre.n_measurements == n_frames)
+    # 3 mm / 0.3 mm = 11 lines (half 5), central 40 lines -> positions mid0 + {-15,-10,...,15}? only those fitting
+    from quantus.correlation_length.correlation import _central_region, _lateral_positions
+    first, last = _central_region(n_lines, _mid(n_lines), 0.5)
+    expected = _lateral_positions(_mid(n_lines), 5, first, last)
+    assert np.all(half.n_positions == len(expected)) and len(expected) > 1
+    assert half.n_frames == n_frames and half.ax_corr_mm.shape == (len(half.depths_mm), n_frames * len(expected))
+    # the centre-line measurement is one of the columns (position index of the centre line, frame-major)
+    p = int(np.nonzero(expected == _mid(n_lines))[0][0])
+    np.testing.assert_allclose(half.lat_corr_mm[:, p::len(expected)], centre.lat_corr_mm)
+    assert np.all(half.to_table()["n_measurements"] <= n_frames * len(expected))
+    assert "lateral positions" in half.describe_window()
+    # the map with the same fraction measures only windows inside the region
+    from quantus.correlation_length import correlation_length_map
+    m = correlation_length_map(rf, axial, lateral, 3.0, 3.0, 5.0, 20.0, 4, lateral_fraction=0.5)
+    measured = np.isfinite(m.lat_mean_lines).any(axis=0)
+    assert np.all(m.cols[measured] - 5 >= first) and np.all(m.cols[measured] + 5 <= last)
+
+
 def test_map_region_limits_the_recommended_window():
     from quantus.correlation_length import correlation_length_map
     rng = np.random.default_rng(3)
@@ -158,3 +230,14 @@ def test_map_region_limits_the_recommended_window():
     assert region["depth_range_mm"][0] > d
     with pytest.raises(ValueError, match="No measured windows"):
         m.recommended_window(depth_range_mm=(1000, 2000))
+
+
+def test_sd_is_zero_for_one_measurement_and_nan_for_none():
+    """With lateral_fraction depths can have different numbers of measurements (review finding)."""
+    r = _result(ax_corr_mm=np.array([[0.2, np.nan], [0.3, 0.32], [np.nan, np.nan]]),
+                lat_corr_mm=np.array([[0.26, np.nan], [0.39, 0.4], [np.nan, np.nan]]))
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sd, mean = r.ax_std_mm, r.ax_mean_mm
+    assert sd[0] == 0.0 and sd[1] > 0 and np.isnan(sd[2]) and np.isnan(mean[2])
