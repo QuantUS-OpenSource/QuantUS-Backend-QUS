@@ -7,7 +7,9 @@ from pathlib import Path
 
 # Local Module Imports
 from ....data_objs.image import UltrasoundRfImage
-from .parser import ClariusTarUnpacker, clariusRfParserWrapper
+import numpy as np
+
+from .parser import ClariusTarUnpacker, clariusRfParserWrapper, clariusRfPhantomParser
 
 class EntryClass(UltrasoundRfImage):
     """
@@ -16,6 +18,7 @@ class EntryClass(UltrasoundRfImage):
     Supports both raw RF files and compressed .tar files.
     """
     extensions = [".raw", ".tar"]  # Clarius RF files can be raw or tar compressed
+    folder_patterns = ["*rf.raw", "*.tar"]  # a phantom folder: every capture (one rf.raw per capture folder, or .tar)
     spatial_dims = 2  # Clarius data can be 3D but we extract 2D frames
     gui_kwargs = ['use_tgc', 'start_depth_factor']; cli_kwargs = ['visualize']
     default_gui_kwarg_vals = ['True', 'None']  # str because parsed from GUI
@@ -26,7 +29,9 @@ class EntryClass(UltrasoundRfImage):
         
         Args:
             scan_path (str): Path to the scan RF file (.raw or .tar)
-            phantom_path (str): Path to the phantom RF file (.raw or .tar)
+            phantom_path (str | list[str]): Reference phantom RF file(s) (.raw or .tar) and/or folder(s);
+                a folder is searched recursively for every capture (*rf.raw, *.tar).
+                Every frame of every file goes into phantom_rf_frames (averaged reference spectrum).
             **kwargs:
                 visualize (bool): Whether to visualize the data in the terminal after extraction.
                 use_tgc (bool): Whether to use TGC data in processing.
@@ -40,13 +45,14 @@ class EntryClass(UltrasoundRfImage):
 
         # Validate file extensions
         scan_path = Path(scan_path)
-        phantom_path = Path(phantom_path)
         assert scan_path.suffix in self.extensions, f"Scan file must end with {self.extensions}"
-        assert phantom_path.suffix in self.extensions, f"Phantom file must end with {self.extensions}"
-        
+        for p in self.phantom_paths:
+            assert Path(p).suffix in self.extensions, f"Phantom file must end with {self.extensions}: {p}"
+
         # Handle tar files if provided and get extracted folder paths
         scan_raw_dir = self._handle_tar_file(str(scan_path))
-        phantom_raw_dir = self._handle_tar_file(str(phantom_path))
+        phantom_raw_dirs = [self._handle_tar_file(p) for p in self.phantom_paths]
+        phantom_raw_dir = phantom_raw_dirs[0]
                 
         # Parse the data using the Clarius parser
         imgData, imgInfo, refData, refInfo, scanConverted = clariusRfParserWrapper(
@@ -63,6 +69,24 @@ class EntryClass(UltrasoundRfImage):
         # Extract the frame and ensure correct orientation
         self.rf_data = imgData.rf  # Shape will be (frames, axial, lateral)
         self.phantom_rf_data = refData.rf[frame_idx]
+
+        # Sampling frequency from the scan's rf.yml (Hz); every reference capture must match it.
+        self.sampling_frequency = float(imgInfo.samplingFrequency)
+        self._check_phantom_sampling_frequency(self.phantom_paths[0], refInfo.samplingFrequency)
+
+        # Every frame of every reference file, for the averaged reference spectrum.
+        ref_frames = [np.asarray(refData.rf)]
+        for p, raw_dir in zip(self.phantom_paths[1:], phantom_raw_dirs[1:]):
+            extra_data, extra_info = clariusRfPhantomParser(os.path.dirname(raw_dir), visualize=visualize,
+                                                            use_tgc=use_tgc, start_depth_factor=start_depth_factor)
+            self._check_phantom_sampling_frequency(p, extra_info.samplingFrequency)
+            extra = np.asarray(extra_data.rf)
+            if extra.shape[1:] != ref_frames[0].shape[1:]:
+                raise ValueError(f"Reference phantom {Path(p).name} has frames of shape {extra.shape[1:]}, but "
+                                 f"{Path(self.phantom_paths[0]).name} has {ref_frames[0].shape[1:]}; "
+                                 "all reference files must use the same probe and depth settings.")
+            ref_frames.append(extra)
+        self.phantom_rf_frames = np.concatenate(ref_frames, axis=0)  # (n_frames, samples, lines)
         self.bmode = imgData.bMode
         
         # Calculate resolutions
@@ -81,6 +105,12 @@ class EntryClass(UltrasoundRfImage):
             self.start_depth = imgInfo.startDepth1
             self.end_depth = imgInfo.endDepth1
             
+    def _check_phantom_sampling_frequency(self, phantom_path: str, phantom_fs: float) -> None:
+        if not np.isclose(phantom_fs, self.sampling_frequency, rtol=1e-3):
+            raise ValueError(f"Reference phantom {Path(phantom_path).name} was sampled at {phantom_fs / 1e6:g} MHz "
+                             f"but the scan at {self.sampling_frequency / 1e6:g} MHz (from rf.yml); "
+                             "acquire the phantom with the same probe and settings.")
+
     def _handle_tar_file(self, file_path: str) -> str:
         """Handle tar file extraction if needed.
         

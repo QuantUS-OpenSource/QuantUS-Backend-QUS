@@ -71,7 +71,9 @@ def roi_power_spectrum_db(rf: np.ndarray, sampling_frequency: float, roi: Option
     """Line-averaged power spectrum of an RF ROI, normalised to its peak.
 
     Args:
-        rf: 2D RF frame [samples, lines], pre-scan-conversion.
+        rf: 2D RF frame [samples, lines], or a stack of frames [frames, samples, lines]
+            (pre-scan-conversion); for a stack the same ROI is taken from every frame and the
+            power is averaged over lines and frames.
         sampling_frequency: Hz.
         roi: see module docstring; None uses default_roi.
         n_fft: zero-padded FFT length (default max(8192, next pow2 of the frame depth)).
@@ -80,12 +82,17 @@ def roi_power_spectrum_db(rf: np.ndarray, sampling_frequency: float, roi: Option
         freqs [Hz] and power [dB re peak], from bin LOW_FREQ_IDX_START up to Nyquist.
     """
     rf = np.asarray(rf, dtype=np.float64)
-    if rf.ndim != 2:
-        raise ValueError(f"Expected a 2D RF frame [samples, lines], got shape {rf.shape}")
-    r0, r1, c0, c1 = _validate_roi(default_roi(rf.shape) if roi is None else roi, rf.shape)
+    if rf.ndim == 2:
+        rf = rf[None]
+    if rf.ndim != 3:
+        raise ValueError(f"Expected RF [samples, lines] or [frames, samples, lines], got shape {rf.shape}")
+    frame_shape = rf.shape[1:]
+    r0, r1, c0, c1 = _validate_roi(default_roi(frame_shape) if roi is None else roi, frame_shape)
     if n_fft is None:
-        n_fft = max(8192, 1 << int(np.ceil(np.log2(rf.shape[0]))))
-    mag = np.abs(np.fft.fft(rf[r0:r1, c0:c1], n=n_fft, axis=0))
+        n_fft = max(8192, 1 << int(np.ceil(np.log2(frame_shape[0]))))
+    # frames side by side -> (samples, frames * lines), then one line-average covers all frames
+    roi_rf = rf[:, r0:r1, c0:c1].transpose(1, 0, 2).reshape(r1 - r0, -1)
+    mag = np.abs(np.fft.fft(roi_rf, n=n_fft, axis=0))
     keep = slice(LOW_FREQ_IDX_START, n_fft // 2)
     with np.errstate(divide="ignore"):
         p = 10 * np.log10(np.mean(mag[keep] ** 2, axis=1))
@@ -110,6 +117,8 @@ def compare_spectra(sample_rf: np.ndarray, reference_rf: np.ndarray, sampling_fr
 
     Args:
         sample_rf, reference_rf: 2D RF frames [samples, lines], pre-scan-conversion.
+            reference_rf may also be a stack [frames, samples, lines]; its spectrum is then
+            averaged over every frame (same ROI in each).
         sampling_frequency: Hz.
         sample_roi, reference_roi: see module docstring; None uses default_roi.
         cutoff_db: each spectrum's band is where it stays above this level (relative to its
@@ -119,8 +128,8 @@ def compare_spectra(sample_rf: np.ndarray, reference_rf: np.ndarray, sampling_fr
     sample_rf = np.asarray(sample_rf)
     reference_rf = np.asarray(reference_rf)
     sample_roi = default_roi(sample_rf.shape) if sample_roi is None else tuple(sample_roi)
-    reference_roi = default_roi(reference_rf.shape) if reference_roi is None else tuple(reference_roi)
-    n_fft = max(8192, 1 << int(np.ceil(np.log2(max(sample_rf.shape[0], reference_rf.shape[0])))))
+    reference_roi = default_roi(reference_rf.shape[-2:]) if reference_roi is None else tuple(reference_roi)
+    n_fft = max(8192, 1 << int(np.ceil(np.log2(max(sample_rf.shape[-2], reference_rf.shape[-2])))))
 
     f, p1 = roi_power_spectrum_db(sample_rf, sampling_frequency, sample_roi, n_fft)
     _, p2 = roi_power_spectrum_db(reference_rf, sampling_frequency, reference_roi, n_fft)
@@ -153,6 +162,8 @@ def compare_image_spectra(image_data, frame: int = 0, sample_roi: Optional[Roi] 
                           sampling_frequency: Optional[float] = None) -> SpectrumComparison:
     """compare_spectra on a loaded UltrasoundRfImage (2D scans; `frame` picks the cine frame).
 
+    The reference spectrum is averaged over every reference frame (image_data.get_phantom_frames()).
+
     sampling_frequency defaults to image_data.sampling_frequency, which loaders that know it
     (e.g. vevo_f2_rf) set; otherwise pass it explicitly.
     """
@@ -160,9 +171,7 @@ def compare_image_spectra(image_data, frame: int = 0, sample_roi: Optional[Roi] 
     if not fs:
         raise ValueError("Sampling frequency unknown for this scan loader; pass sampling_frequency (Hz).")
     rf = image_data.rf_data if image_data.rf_data.ndim == 2 else image_data.rf_data[frame]
-    ref = image_data.phantom_rf_data
-    if ref.ndim == 3:
-        ref = ref[0]
+    ref = image_data.get_phantom_frames()
     return compare_spectra(rf, ref, fs, sample_roi, reference_roi, cutoff_db)
 
 

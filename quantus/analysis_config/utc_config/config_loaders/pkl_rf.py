@@ -3,6 +3,7 @@ from pathlib import Path
 
 from ..decorators import *
 from ....data_objs.analysis_config import RfAnalysisConfig
+from ....data_objs.image import as_path_list
 
 @extensions(".pkl", ".pickle")
 @gui_kwargs("assert_scan", "assert_phantom")
@@ -20,7 +21,7 @@ def pkl_rf(analysis_path: str, **kwargs) -> RfAnalysisConfig:
     if kwargs.get("assert_scan"):
         assert config_pkl["Image Name"] == Path(kwargs["scan_path"]).name, 'Scan file name mismatch'
     if kwargs.get("assert_phantom"):
-        assert config_pkl["Phantom Name"] == Path(kwargs["phantom_path"]).name, 'Phantom file name mismatch'
+        assert config_pkl["Phantom Name"] == Path(as_path_list(kwargs["phantom_path"])[0]).name, 'Phantom file name mismatch'
     
     out = config_pkl["Config"]
     

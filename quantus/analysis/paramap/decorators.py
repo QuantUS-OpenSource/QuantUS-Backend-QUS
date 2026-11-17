@@ -16,5 +16,11 @@ default_kwarg_vals = attr_decorator('default_kwarg_vals')
 #   "central_lines" -- 2D only: the window's axial bounds, but the central 50% of the
 #                    phantom's lines regardless of the window's lateral position. For methods
 #                    that average the reference spectrum across lines (e.g. MATLAB-matched AC/BSC).
-PHANTOM_WINDOW_POLICIES = ("matched", "central_lines")
+#                    Lines from every reference frame are concatenated (see below).
+#   "matched_all_frames" -- 2D only: the "matched" slice, taken from every reference frame and
+#                    concatenated along the line axis -> (samples, n_ref_frames * window lines).
+#                    For methods that only average the reference power spectrum across lines.
+# "matched" uses the first reference frame only; the other two average over all of
+# image_data.get_phantom_frames() (several reference files / frames).
+PHANTOM_WINDOW_POLICIES = ("matched", "central_lines", "matched_all_frames")
 phantom_window = attr_decorator('phantom_window')

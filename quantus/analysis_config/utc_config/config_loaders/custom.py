@@ -11,7 +11,8 @@ def custom(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         transducer_freq_band (list): [min, max] frequency band of the transducer (Hz).
         analysis_freq_band (list): [lower, upper] frequency band for analysis (Hz).
         center_frequency (float): Center frequency of the transducer (Hz).
-        sampling_frequency (float): Sampling frequency (Hz).
+        sampling_frequency (int, optional): Sampling frequency (Hz). If omitted, the analysis uses
+            the scan's (image_data.sampling_frequency, e.g. Clarius rf.yml); if given, it must match it.
         ax_win_size (float): Axial length per window, in ax_win_size_units.
         lat_win_size (float): Lateral length per window, in lat_win_size_units.
         ax_win_size_units (str): WIN_SIZE_UNITS_MM ("mm") or WIN_SIZE_UNITS_WAVELENGTH ("number of wavelength").
@@ -33,7 +34,8 @@ def custom(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         assert type(kwargs["transducer_freq_band"]) is list, "transducer_freq_band must be a list"
         assert len(kwargs["transducer_freq_band"]) == 2, "transducer_freq_band must be a list of two elements [min, max]"
         assert type(kwargs["center_frequency"]) is int, "center_frequency must be a int"
-        assert type(kwargs["sampling_frequency"]) is int, "sampling_frequency must be a int"
+        if kwargs.get("sampling_frequency") is not None:
+            assert type(kwargs["sampling_frequency"]) is int, "sampling_frequency must be a int"
         assert type(kwargs["ax_win_size"]) is float, "ax_win_size must be a float"
         assert type(kwargs["lat_win_size"]) is float, "lat_win_size must be a float"
         assert type(kwargs["window_thresh"]) is float, "window_thresh must be a float"
@@ -48,7 +50,7 @@ def custom(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         out.transducer_freq_band = kwargs["transducer_freq_band"]
         out.analysis_freq_band = kwargs["analysis_freq_band"]
         out.center_frequency = kwargs["center_frequency"]
-        out.sampling_frequency = kwargs["sampling_frequency"]
+        out.sampling_frequency = kwargs.get("sampling_frequency")
         out.ax_win_size = kwargs["ax_win_size"]
         out.lat_win_size = kwargs["lat_win_size"]
         out.window_thresh = kwargs["window_thresh"]

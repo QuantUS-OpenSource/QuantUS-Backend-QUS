@@ -924,12 +924,50 @@ class ClariusParser():
         """A probe is curvilinear only if rf.yml gives it a positive radius."""
         return self._probe_radius_mm() > 0
 
+    def _probe_array_span_mm(self) -> float:
+        """Distance (mm, along the probe face) between the first and last element centres.
+
+        rf.yml gives `elements` and `pitch` (um), e.g. C3 HD3 192 x 300 um, L15 192 x 260 um.
+        Lines are unsteered and span the whole array, so this is also the span of the A-lines.
+        """
+        probe = self.rf_yml_obj.rf_probe or {}
+        def num(key):
+            v = probe.get(key)
+            if isinstance(v, str):
+                v = self.extract_first_num(v)
+            try:
+                return float(v) if v is not None else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+        n_elements = num("elements") or float(self.rf_yml_obj.rf_size['number of lines'])
+        pitch_mm = num("pitch") / 1000  # rf.yml pitch is in um
+        if n_elements < 2 or pitch_mm <= 0:
+            raise ValueError(f"Cannot compute the array span from rf.yml probe block: {probe}")
+        return (n_elements - 1) * pitch_mm
+
+    def _probe_field_of_view_deg(self) -> float:
+        """Sector angle (deg) spanned by the A-lines of a curvilinear probe: element arc / radius.
+        e.g. C3 HD3: 191 x 0.3 mm / 45 mm -> 72.96 deg."""
+        radius_mm = self._probe_radius_mm()
+        if radius_mm <= 0:
+            raise ValueError("Cannot compute curvilinear field of view without a probe radius in rf.yml")
+        return float(np.degrees(self._probe_array_span_mm() / radius_mm))
+
+    def _linear_line_spacing_mm(self) -> float:
+        """A-line spacing (mm) of a linear probe: element span / (lines - 1).
+        e.g. L15: 192 elements x 260 um, 192 lines -> 0.26 mm (= pitch)."""
+        n_lines = int(self.rf_yml_obj.rf_size['number of lines'])
+        if n_lines < 2:
+            raise ValueError("Cannot compute line spacing for fewer than 2 lines")
+        return self._probe_array_span_mm() / (n_lines - 1)
+
     ###################################################################################
-    
+
     def set_data_of_clarius_info_struct(self):
-        
+
         if self.is_curvilinear():
-            self.clarius_info_struct.width1 = self._probe_radius_mm() * 2
+            # Sector width in degrees (previously 2 * radius_mm, which is not an angle).
+            self.clarius_info_struct.width1 = self._probe_field_of_view_deg()
             self.scan_converted = True
         else:
             self.scan_converted = False
@@ -1017,7 +1055,13 @@ class ClariusParser():
             
         else:
             self.clarius_info_struct.yResRF = self.clarius_info_struct.endDepth1*1000 / self.clarius_info_struct.samplesPerLine
-            self.clarius_info_struct.xResRF = self.clarius_info_struct.yResRF * (bmode.shape[0]/bmode.shape[1]) # placeholder
+            # A-line spacing from the probe's element pitch in rf.yml (previously a placeholder,
+            # yResRF * samples / lines, ~19% small for L15/L20).
+            try:
+                self.clarius_info_struct.xResRF = self._linear_line_spacing_mm()
+            except ValueError as e:
+                logging.warning(f"{e}; falling back to the old lateral-resolution placeholder")
+                self.clarius_info_struct.xResRF = self.clarius_info_struct.yResRF * (bmode.shape[0]/bmode.shape[1])
             self.clarius_info_struct.axialRes = self.clarius_info_struct.yResRF #mm
             self.clarius_info_struct.lateralRes = self.clarius_info_struct.xResRF #mm
             self.clarius_info_struct.depth = self.clarius_info_struct.endDepth1*1000 #mm
@@ -1496,4 +1540,49 @@ def clariusRfParserWrapper(img_folder: str, ref_folder: str, visualize: bool = F
         start_depth_factor=start_depth_factor
     ) 
     
+def clarius_sampling_frequency(path: str) -> float:
+    """Sampling frequency (Hz) from the rf.yml belonging to a Clarius scan path, without loading it.
+
+    path: the *rf.raw (or any file in the capture folder), the capture folder, or a .tar
+    (whose '<name>_extracted' folder must already exist, i.e. the scan was loaded once).
+    """
+    p = Path(path)
+    if p.suffix == ".tar":
+        folder = p.with_name(p.stem + "_extracted")
+    elif p.is_dir():
+        folder = p
+    else:
+        folder = p.parent
+    ymls = sorted(folder.rglob("*rf.yml")) if folder.is_dir() else []
+    if len(ymls) != 1:
+        raise FileNotFoundError(f"Expected exactly 1 rf.yml for {path} (looked in {folder}), found {len(ymls)}")
+    with open(ymls[0], "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            if line.strip().lower().startswith("sampling rate"):
+                m = re.search(r"([\d.]+)\s*([kMG]?)Hz", line)
+                if m:
+                    return float(m.group(1)) * {"": 1, "k": 1e3, "M": 1e6, "G": 1e9}[m.group(2)]
+    raise ValueError(f"No 'sampling rate' entry in {ymls[0]}")
+
+###################################################################################
+
+def clariusRfPhantomParser(ref_folder: str, visualize: bool = False, use_tgc: bool = False,
+                           start_depth_factor: float | None = None) -> Tuple[DataOutputStruct, InfoStruct]:
+    """Parse one extra Clarius reference-phantom folder (no scan). Returns (refData, refInfo).
+
+    Used for the 2nd..Nth reference file when several phantoms are averaged; the first is
+    parsed together with the scan by clariusRfParserWrapper.
+    """
+    ref_folder = Path(ref_folder)
+    raw_files = list(ref_folder.glob("*rf.raw"))
+    info_files = list(ref_folder.glob("*rf.yml"))
+    tgc_files = list(ref_folder.glob("*env.tgc.yml"))
+    assert len(raw_files) == 1, f"Exactly 1 rf.raw file must be in {ref_folder}, found {len(raw_files)}"
+    assert len(info_files) == 1, f"Exactly 1 rf.yml file must be in {ref_folder}, found {len(info_files)}"
+    assert len(tgc_files) <= 1, f"At most 1 env.tgc.yml file may be in {ref_folder}, found {len(tgc_files)}"
+    tgc = str(tgc_files[0]) if tgc_files else None
+    obj = ClariusParser(str(raw_files[0]), tgc, str(info_files[0]), visualize=visualize,
+                        use_tgc=use_tgc, start_depth_factor=start_depth_factor)
+    return obj.clarius_data_struct, obj.clarius_info_struct
+
 ###################################################################################

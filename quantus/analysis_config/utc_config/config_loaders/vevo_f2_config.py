@@ -1,5 +1,6 @@
 from ..decorators import *
 from ....data_objs.analysis_config import RfAnalysisConfig, WIN_SIZE_UNITS_WAVELENGTH
+from ....data_objs.image import as_path_list
 from ....image_loading.utc_loaders.vevo_f2_rf.parser import read_f2
 from ....power_spectrum import compare_spectra
 
@@ -24,7 +25,7 @@ def vevo_f2_config(analysis_path: str, **kwargs) -> RfAnalysisConfig:
         window_thresh, axial_overlap, lateral_overlap (float): defaults 0.95, 0.5, 0.5.
     """
     scan_path = kwargs["scan_path"]
-    phantom_path = kwargs["phantom_path"]
+    phantom_path = as_path_list(kwargs["phantom_path"])[0]  # band estimate uses the first reference file
     c = float(kwargs.get("speed_of_sound", 1540.0))
 
     rf, _, _, fs_mhz, _ = read_f2(scan_path, c, frames=int(kwargs.get("frame_idx", 0)))

@@ -1,4 +1,5 @@
 import numpy as np
+from pathlib import Path
 from scipy.signal import hilbert
 
 from ....data_objs.image import UltrasoundRfImage
@@ -25,6 +26,7 @@ class EntryClass(UltrasoundRfImage):
     at segmentation time, as in readF2.m / MainScript.m.
     """
     extensions = [".bmode"]  # matches both .rf.bmode and .rf.3d.bmode
+    folder_patterns = ["*.rf.bmode", "*.rf.3d.bmode"]  # a phantom folder: every RF acquisition in it
     spatial_dims = 2
     gui_kwargs = ['speed_of_sound', 'ref_frame_idx', 'dynamic_range']
     cli_kwargs = []
@@ -35,11 +37,13 @@ class EntryClass(UltrasoundRfImage):
         """
         Args:
             scan_path (str): Path to the scan .rf.bmode / .rf.3d.bmode file.
-            phantom_path (str): Path to the reference phantom .rf.bmode / .rf.3d.bmode file.
+            phantom_path (str | list[str]): Reference phantom .rf.bmode / .rf.3d.bmode file(s) and/or
+                folder(s) (searched recursively). Every frame of every file goes into phantom_rf_frames.
             **kwargs:
                 speed_of_sound (float): m/s, used to derive the sampling frequency from the
                     depth axis (default 1540).
-                ref_frame_idx (int): 0-based phantom frame used as the reference (default 0).
+                ref_frame_idx (int): 0-based frame of the first phantom file kept as phantom_rf_data
+                    (single-frame users, e.g. the spectrum checker); default 0.
                 dynamic_range (float): B-mode display dynamic range in dB (default 50).
         """
         super().__init__(scan_path, phantom_path)
@@ -49,13 +53,23 @@ class EntryClass(UltrasoundRfImage):
         dynamic_range = float(kwargs.get('dynamic_range', 50))
 
         rf, axial, lateral, fs, params = read_f2(scan_path, c, frames=None)
-        ref_rf, _, _, ref_fs, ref_params = read_f2(phantom_path, c, frames=ref_frame_idx)
-        if not np.isclose(fs, ref_fs, rtol=1e-3):
-            raise ValueError(f"Scan ({fs:.3f} MHz) and phantom ({ref_fs:.3f} MHz) sampling "
-                             "frequencies differ; acquire the phantom with the same depth settings.")
+        # Every frame of every reference file goes into the averaged reference spectrum.
+        ref_frames, ref_params = [], None
+        for p in self.phantom_paths:
+            ref_rf, _, _, ref_fs, params_p = read_f2(p, c, frames=None)
+            if not np.isclose(fs, ref_fs, rtol=1e-3):
+                raise ValueError(f"Scan ({fs:.3f} MHz) and phantom {Path(p).name} ({ref_fs:.3f} MHz) sampling "
+                                 "frequencies differ; acquire the phantom with the same depth settings.")
+            if ref_frames and ref_rf.shape[1:] != ref_frames[0].shape[1:]:
+                raise ValueError(f"Reference phantom {Path(p).name} has frames of shape {ref_rf.shape[1:]}, but "
+                                 f"{Path(self.phantom_paths[0]).name} has {ref_frames[0].shape[1:]}; "
+                                 "all reference files must use the same probe and depth settings.")
+            ref_frames.append(ref_rf)
+            ref_params = ref_params or params_p
 
         self.rf_data = rf                    # [frames, samples, lines]
-        self.phantom_rf_data = ref_rf[0]     # [samples, lines]
+        self.phantom_rf_frames = np.concatenate(ref_frames, axis=0)  # [n_ref_frames, samples, lines]
+        self.phantom_rf_data = ref_frames[0][ref_frame_idx]          # [samples, lines]
         self.bmode = _rf_to_bmode(rf, dynamic_range)
         self.axial_res = float(axial[1] - axial[0])  # mm/pix
 

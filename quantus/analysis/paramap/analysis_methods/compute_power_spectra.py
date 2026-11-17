@@ -7,6 +7,7 @@ from ....data_objs.analysis import Window
 from ....data_objs.image import UltrasoundRfImage
 
 @supported_spatial_dims(2, 3)
+@phantom_window("matched_all_frames")  # reference PS averaged over lines of every reference frame
 @output_vars("f", "nps", "r_ps", "ps")
 @required_kwargs("n_fft")
 @default_kwarg_vals(8192)

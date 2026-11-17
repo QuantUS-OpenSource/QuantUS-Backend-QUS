@@ -39,11 +39,27 @@ class ParamapAnalysis(ParamapAnalysisBase):
         self.seg_data = seg
         self.image_data = image_data
         self.config = config
+        self._check_sampling_frequency()
         if hasattr(self.seg_data, "splines") and len(self.seg_data.splines) == 2:
             self.spline_x = seg.splines[0]
             self.spline_y = seg.splines[1]
         self.determine_func_order()
             
+    def _check_sampling_frequency(self) -> None:
+        """The scan file's sampling frequency (image_data.sampling_frequency, e.g. Clarius rf.yml)
+        is the truth: fill it into a config without one, and refuse a config that disagrees."""
+        image_fs = getattr(self.image_data, "sampling_frequency", None)
+        config_fs = getattr(self.config, "sampling_frequency", None)
+        if not image_fs:
+            if not config_fs:
+                raise ValueError("Sampling frequency unknown: the scan loader doesn't provide it, so set it in the config.")
+            return
+        if not config_fs:
+            self.config.sampling_frequency = image_fs
+        elif abs(config_fs - image_fs) > 1e-3 * image_fs:
+            raise ValueError(f"Config sampling frequency {config_fs / 1e6:g} MHz does not match the scan file's "
+                             f"{image_fs / 1e6:g} MHz; fix the config (or omit sampling_frequency to use the file's).")
+
     def determine_func_order(self):
         """Determine the order of functions to be applied to the data.
         
@@ -248,6 +264,12 @@ class ParamapAnalysis(ParamapAnalysisBase):
     def get_phantom_window(self, window: Window, policy: str) -> np.ndarray:
         """Slice the phantom RF data for one window, according to a function's declared
         @phantom_window policy (see PHANTOM_WINDOW_POLICIES in decorators.py).
+
+        "matched" uses the first reference frame only (shape == scan window). "central_lines"
+        and "matched_all_frames" take the same slice from every reference frame
+        (image_data.get_phantom_frames()) and concatenate them along the line axis, so a
+        reference spectrum averaged over lines is averaged over all reference frames too.
+        With one reference frame all three behave as before.
         """
         phantom = self.image_data.phantom_rf_data
         if self.image_data.bmode.ndim == 3:
@@ -258,19 +280,36 @@ class ParamapAnalysis(ParamapAnalysisBase):
             ]
 
         if policy == "central_lines":
-            n_ref_lines = phantom.shape[1]
+            frames = self.image_data.get_phantom_frames()
+            n_ref_lines = frames.shape[2]
             lat_start_ix = round(0.25*n_ref_lines)-1
             lat_end_ix = round(0.75*n_ref_lines)-1
-            return phantom[window.ax_min: window.ax_max + 1, lat_start_ix: lat_end_ix+1]
+            return self._concat_frames(frames[:, window.ax_min: window.ax_max + 1, lat_start_ix: lat_end_ix+1])
 
-        # "matched": same lateral width as the scan window. If the phantom has fewer lines than
-        # the window's position needs, shift the window inward so the shapes still agree
-        # (e.g. hscan divides scan by phantom element-wise).
-        n_lines = window.lat_max - window.lat_min + 1
-        if phantom.shape[1] < n_lines:
-            raise ValueError(f"Phantom has {phantom.shape[1]} lines but the analysis window needs {n_lines}.")
-        lat_start = min(window.lat_min, phantom.shape[1] - n_lines)
+        if policy == "matched_all_frames":
+            frames = self.image_data.get_phantom_frames()
+            lat_start, n_lines = self._matched_lateral_bounds(window, frames.shape[2])
+            return self._concat_frames(frames[:, window.ax_min: window.ax_max + 1, lat_start: lat_start + n_lines])
+
+        # "matched": same lateral width as the scan window, first reference frame only.
+        lat_start, n_lines = self._matched_lateral_bounds(window, phantom.shape[1])
         return phantom[window.ax_min: window.ax_max + 1, lat_start: lat_start + n_lines]
+
+    @staticmethod
+    def _matched_lateral_bounds(window: Window, n_phantom_lines: int):
+        """Lateral start and width of a phantom slice matching the scan window. If the phantom
+        has fewer lines than the window's position needs, shift the window inward so the shapes
+        still agree (e.g. hscan divides scan by phantom element-wise)."""
+        n_lines = window.lat_max - window.lat_min + 1
+        if n_phantom_lines < n_lines:
+            raise ValueError(f"Phantom has {n_phantom_lines} lines but the analysis window needs {n_lines}.")
+        return min(window.lat_min, n_phantom_lines - n_lines), n_lines
+
+    @staticmethod
+    def _concat_frames(stack: np.ndarray) -> np.ndarray:
+        """(n_frames, samples, lines) -> (samples, n_frames * lines): frames side by side."""
+        n_frames, n_samples, n_lines = stack.shape
+        return stack.transpose(1, 0, 2).reshape(n_samples, n_frames * n_lines)
 
     def compute_aggregate_vals(self):
         """Run aggregate functions once every window has been fully processed, giving them

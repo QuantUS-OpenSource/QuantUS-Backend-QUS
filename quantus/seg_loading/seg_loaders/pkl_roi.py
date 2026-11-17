@@ -6,7 +6,7 @@ from PIL import Image, ImageDraw
 
 from ..decorators import extensions
 from ...data_objs.seg import BmodeSeg
-from ...data_objs.image import UltrasoundRfImage
+from ...data_objs.image import UltrasoundRfImage, as_path_list
 
 @extensions(".pkl", ".pickle")
 def pkl_roi(image_data: UltrasoundRfImage, seg_path: str, **kwargs) -> BmodeSeg:
@@ -26,7 +26,7 @@ def pkl_roi(image_data: UltrasoundRfImage, seg_path: str, **kwargs) -> BmodeSeg:
     if kwargs.get("assert_scan"):
         assert roi_info["Image Name"] == Path(kwargs["scan_path"]).name, 'Scan file name mismatch'
     if kwargs.get("assert_phantom"):
-        assert roi_info["Phantom Name"] == Path(kwargs["phantom_path"]).name, 'Phantom file name mismatch'
+        assert roi_info["Phantom Name"] == Path(as_path_list(kwargs["phantom_path"])[0]).name, 'Phantom file name mismatch'
     
     spline_x = np.array(roi_info["Spline X"])
     spline_y = np.array(roi_info["Spline Y"])
