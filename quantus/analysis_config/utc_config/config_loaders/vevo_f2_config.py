@@ -2,7 +2,7 @@ from ..decorators import *
 from ....data_objs.analysis_config import RfAnalysisConfig, WIN_SIZE_UNITS_WAVELENGTH
 from ....data_objs.image import as_path_list
 from ....image_loading.utc_loaders.vevo_f2_rf.parser import read_f2
-from ....power_spectrum import compare_spectra
+from ....seg_loading.power_spectrum import compare_spectra
 
 @extensions()
 def vevo_f2_config(analysis_path: str, **kwargs) -> RfAnalysisConfig:
@@ -10,7 +10,7 @@ def vevo_f2_config(analysis_path: str, **kwargs) -> RfAnalysisConfig:
 
     The sampling frequency is derived from the scan's .rf.xml depth axis (as readF2.m does),
     and the analysis band / center frequency come from the overlap of the scan and phantom
-    power spectra at bw_cutoff dB (as quantus.power_spectrum.compare_spectra does, using its default central ROI on
+    power spectra at bw_cutoff dB (as quantus.seg_loading.power_spectrum.compare_spectra does, using its default central ROI on
     frame `frame_idx` of the scan and `ref_frame_idx` of the phantom). analysis_path is unused.
 
     Kwargs (all optional):

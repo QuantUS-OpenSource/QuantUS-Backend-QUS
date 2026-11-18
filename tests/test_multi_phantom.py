@@ -14,8 +14,8 @@ from quantus.analysis.paramap.transforms import compute_power_spec
 from pathlib import Path
 
 from quantus.data_objs.image import UltrasoundRfImage, as_path_list, find_data_files
-from quantus.power_spectrum import compare_spectra
-from quantus.power_spectrum.spectrum import LOW_FREQ_IDX_START, roi_power_spectrum_db
+from quantus.seg_loading.power_spectrum import compare_spectra
+from quantus.seg_loading.power_spectrum.spectrum import LOW_FREQ_IDX_START, roi_power_spectrum_db
 
 from test_phantom_window import _make_inputs, _window
 

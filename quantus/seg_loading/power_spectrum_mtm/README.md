@@ -3,7 +3,7 @@
 Port of the S1Study MATLAB chain (Code/ and Code/Functions/, Nov 2026). This is the step after
 the first-pass ROI is accepted: the first pass (correlation_length/first_pass.py) is only a quick
 power check, and the spectra are recomputed here for parameter estimation. It is kept apart from
-`quantus/power_spectrum` (a collaborator's module) until the merge.
+`quantus/seg_loading/power_spectrum` (a collaborator's module) until the merge.
 
 | Step | MATLAB | Python |
 |---|---|---|

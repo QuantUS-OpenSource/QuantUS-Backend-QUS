@@ -6,7 +6,7 @@ with the final window settings** (the first pass uses a simple Hanning-windowed 
 blocks, not the analysis spectral estimator). Port of the MATLAB first-pass
 functions (`S1Study/Code/Functions`, versions of 2026-11-12/13; the `Prostate/Code` copies of
 2026-11-16 compute the same and only generalise names / plots). Lives here for now; to be
-reconciled with `quantus/power_spectrum` at merge.
+reconciled with `quantus/seg_loading/power_spectrum` at merge.
 
 | MATLAB | Python (`first_pass.py`) |
 |---|---|
@@ -19,7 +19,7 @@ The automatic ROI choice (`AutoROIFromFirstPass`) is deliberately not included.
 
 ## Pipeline: correlation-length windows -> first pass
 ```python
-from quantus.correlation_length import windows_and_first_pass, plot_first_pass
+from quantus.seg_loading.correlation_length import windows_and_first_pass, plot_first_pass
 res = windows_and_first_pass(image, preset="C3")   # image = scan_loading_step(...): sample + reference
 print(res.summary())
 res.ax_window_mm, res.lat_window_mm                # from the reference correlation lengths

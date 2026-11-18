@@ -6,7 +6,7 @@ from the shape of the spectra (port of `showPowerF2.m`, verified against it).
 
 ```python
 from quantus.entrypoints import scan_loading_step
-from quantus.power_spectrum import compare_image_spectra, apply_bandwidth_to_config, plot_spectrum_comparison
+from quantus.seg_loading.power_spectrum import compare_image_spectra, apply_bandwidth_to_config, plot_spectrum_comparison
 
 image = scan_loading_step("vevo_f2_rf", scan_path, phantom_path)
 result = compare_image_spectra(image, frame=0,

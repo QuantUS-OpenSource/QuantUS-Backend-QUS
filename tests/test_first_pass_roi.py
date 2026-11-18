@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from quantus.correlation_length.roi import (
+from quantus.seg_loading.correlation_length.roi import (
     rf_outline_points, roi_spline_for_pkl, save_roi_pkl, sector_roi_from_box,
 )
 

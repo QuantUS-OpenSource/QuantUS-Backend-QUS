@@ -11,7 +11,7 @@ Before that fix the two agreed to <= 9e-16 mm.
 
 ```python
 from quantus.entrypoints import scan_loading_step
-from quantus.correlation_length import correlation_lengths_from_image, plot_correlation_lengths
+from quantus.seg_loading.correlation_length import correlation_lengths_from_image, plot_correlation_lengths
 
 image = scan_loading_step("clarius_rf", scan_path, reference_folder)  # every capture in the folder
 res = correlation_lengths_from_image(image, source="phantom",
@@ -27,7 +27,7 @@ res.recommended_window()             # same as a dict
 res.lat_window_factor = 4            # factors can be changed afterwards; recommendations recompute
 
 # 2D: the same measurement on a grid of window positions across the whole image
-from quantus.correlation_length import correlation_length_map_from_image, plot_correlation_length_map
+from quantus.seg_loading.correlation_length import correlation_length_map_from_image, plot_correlation_length_map
 cmap = correlation_length_map_from_image(image, window_length_mm=10, window_width_mm=15)  # lat_step_lines=None: every half window
 print(cmap.describe_window())                                             # largest anywhere in the image
 print(cmap.describe_window(depth_range_mm=(10, 95), lateral_range_mm=(-40, 40)))  # ...or in a region

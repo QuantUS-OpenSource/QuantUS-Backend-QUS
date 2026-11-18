@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from quantus.correlation_length import CorrelationLengths, correlation_lengths
+from quantus.seg_loading.correlation_length import CorrelationLengths, correlation_lengths
 
 
 def _result(**kw):
@@ -100,14 +100,14 @@ def test_window_centres_snap_clamp_and_report_axial_positions():
 
 
 def test_crossing_is_exact_on_the_linear_segment():
-    from quantus.correlation_length.correlation import _first_crossing_shift
+    from quantus.seg_loading.correlation_length.correlation import _first_crossing_shift
     assert _first_crossing_shift(np.array([1.0, 0.6, 0.2, 0.0]), 0.5) == pytest.approx(1.25)
     assert _first_crossing_shift(np.array([1.0, 0.3, 0.1]), 0.5) == pytest.approx(1 / 1.4)
     assert _first_crossing_shift(np.array([1.0, 0.9, 0.8]), 0.5) is None
 
 
 def test_spacings_are_straight_line_distances_for_tilted_sectors():
-    from quantus.correlation_length.correlation import _sample_spacings_mm
+    from quantus.seg_loading.correlation_length.correlation import _sample_spacings_mm
     n_s, n_l, d_th, tilt = 50, 21, np.deg2rad(0.5), np.deg2rad(20)
     r = 40 + np.arange(n_s) * 0.05
     th = tilt + (np.arange(n_l) - 10) * d_th
@@ -119,7 +119,7 @@ def test_spacings_are_straight_line_distances_for_tilted_sectors():
 
 
 def test_map_centre_column_equals_the_depth_profile():
-    from quantus.correlation_length import correlation_length_map
+    from quantus.seg_loading.correlation_length import correlation_length_map
     rng = np.random.default_rng(2)
     n_samples, n_lines = 500, 60
     rf = rng.normal(size=(2, n_samples, n_lines))
@@ -145,8 +145,8 @@ def _mid(n_lines):
 
 
 def test_presets_fill_kwargs_and_explicit_kwargs_win():
-    from quantus.correlation_length import PROBE_PRESETS
-    from quantus.correlation_length.correlation import _apply_preset
+    from quantus.seg_loading.correlation_length import PROBE_PRESETS
+    from quantus.seg_loading.correlation_length.correlation import _apply_preset
     assert {p: v["depth_range_mm"] for p, v in PROBE_PRESETS.items()} == {
         "C3": (5.0, 95.0), "L15": (5.0, 35.0), "L20": (5.0, 16.0)}
     assert all(v["lateral_fraction"] == 0.5 and v["threshold"] == 0.2 for v in PROBE_PRESETS.values())
@@ -174,7 +174,7 @@ def test_depth_range_keeps_whole_windows_inside():
 
 
 def test_lateral_positions_stay_inside_the_central_region():
-    from quantus.correlation_length.correlation import _central_region, _lateral_positions
+    from quantus.seg_loading.correlation_length.correlation import _central_region, _lateral_positions
     first, last = _central_region(192, 95, 0.5)
     assert (first, last) == (47, 143)
     cols = _lateral_positions(95, 10, first, last)  # 21-line window, a centre every 10 lines
@@ -196,7 +196,7 @@ def test_central_half_averages_frames_and_positions():
     np.testing.assert_allclose(half.depths_mm, centre.depths_mm)
     assert centre.n_positions is None and np.all(centre.n_measurements == n_frames)
     # 3 mm / 0.3 mm = 11 lines (half 5), central 40 lines -> positions mid0 + {-15,-10,...,15}? only those fitting
-    from quantus.correlation_length.correlation import _central_region, _lateral_positions
+    from quantus.seg_loading.correlation_length.correlation import _central_region, _lateral_positions
     first, last = _central_region(n_lines, _mid(n_lines), 0.5)
     expected = _lateral_positions(_mid(n_lines), 5, first, last)
     assert np.all(half.n_positions == len(expected)) and len(expected) > 1
@@ -207,14 +207,14 @@ def test_central_half_averages_frames_and_positions():
     assert np.all(half.to_table()["n_measurements"] <= n_frames * len(expected))
     assert "lateral positions" in half.describe_window()
     # the map with the same fraction measures only windows inside the region
-    from quantus.correlation_length import correlation_length_map
+    from quantus.seg_loading.correlation_length import correlation_length_map
     m = correlation_length_map(rf, axial, lateral, 3.0, 3.0, 5.0, 20.0, 4, lateral_fraction=0.5)
     measured = np.isfinite(m.lat_mean_lines).any(axis=0)
     assert np.all(m.cols[measured] - 5 >= first) and np.all(m.cols[measured] + 5 <= last)
 
 
 def test_map_region_limits_the_recommended_window():
-    from quantus.correlation_length import correlation_length_map
+    from quantus.seg_loading.correlation_length import correlation_length_map
     rng = np.random.default_rng(3)
     n_samples, n_lines = 500, 60
     rf = rng.normal(size=(1, n_samples, n_lines))
@@ -248,7 +248,7 @@ def test_line_range_measures_inside_an_roi():
     n_samples, n_lines = 500, 80
     rf = rng.normal(size=(2, n_samples, n_lines))
     axial, lateral = _positions(n_samples, n_lines)
-    from quantus.correlation_length.correlation import _lateral_positions
+    from quantus.seg_loading.correlation_length.correlation import _lateral_positions
     r = correlation_lengths(rf, axial, lateral, 3.0, 3.0, line_range=(10, 45), depth_range_mm=(6.0, 20.0))
     expected = _lateral_positions((10 + 45) // 2, 5, 10, 45)   # 11-line windows inside lines 10-45
     assert np.all(r.n_positions == len(expected)) and expected.min() - 5 >= 10 and expected.max() + 5 <= 45
@@ -257,7 +257,7 @@ def test_line_range_measures_inside_an_roi():
     w = r.recommended_window()
     assert w["depth_range_mm"][0] >= 6.0 and w["depth_range_mm"][1] <= 20.0
     # same as lateral_fraction when the range is the central region
-    from quantus.correlation_length.correlation import _central_region
+    from quantus.seg_loading.correlation_length.correlation import _central_region
     first, last = _central_region(n_lines, _mid(n_lines), 0.5)
     a = correlation_lengths(rf, axial, lateral, 3.0, 3.0, 5.0, 20.0, 4, lateral_fraction=0.5)
     b = correlation_lengths(rf, axial, lateral, 3.0, 3.0, 5.0, 20.0, 4, line_range=(first, last))

@@ -1,6 +1,6 @@
 """First-pass power check (port of CalcFirstPassPowerSpectra / FindBWEdges / IntersectFirstPass /
 ROIBandCheck). The port was checked field by field against the MATLAB on the same RFData.mat
-frames (see quantus/correlation_length/README_first_pass.md); these tests pin the behaviour on
+frames (see quantus/seg_loading/correlation_length/README_first_pass.md); these tests pin the behaviour on
 synthetic data."""
 
 import warnings
@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from scipy.signal import butter, sosfiltfilt
 
-from quantus.correlation_length.first_pass import (
+from quantus.seg_loading.correlation_length.first_pass import (
     NyquistError, NyquistWarning, calc_first_pass, find_bw_edges, inpolygon, intersect_first_pass, matlab_hanning,
     roi_band_check,
 )
@@ -167,7 +167,7 @@ def test_intersect_and_roi_band_of_a_given_roi():
 
 def test_trim_keeps_block_arrays_when_counts_coincide():
     """n_blocks == n_depths must not trim the per-block arrays (review finding)."""
-    from quantus.correlation_length.first_pass import _trim_depths
+    from quantus.seg_loading.correlation_length.first_pass import _trim_depths
     rng = np.random.default_rng(3)
     fs, n_samples, n_lines = 40.0, 1500, 64   # 11 depths at 2.55 mm and 11 ten-line blocks
     rf = _band_limited_rf(rng, 1, n_samples, n_lines, fs, (4, 8))

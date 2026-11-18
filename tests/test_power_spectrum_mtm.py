@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from quantus.power_spectrum_mtm import (
+from quantus.seg_loading.power_spectrum_mtm import (
     bw_options, check_mtm_parameters, determine_spectral_parameters, dpss_tapers, matlab_prctile,
     power_spectrum_mtf, roi_bandwidth, round_band_inward, window_samples,
 )
