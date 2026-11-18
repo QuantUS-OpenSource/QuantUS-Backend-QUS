@@ -64,12 +64,26 @@ def sector_roi_from_box(axial_mm: np.ndarray, lateral_mm: np.ndarray, x0: float,
     if inside.size == 0:
         inside = np.array([int(np.argmin(np.abs(lateral[rm] - (xa + xb) / 2)))])
     l1, l2 = int(inside.min()), int(inside.max())
+    return sector_roi_from_rows_lines(axial, lateral, (r1, r2), (l1, l2))
+
+
+def sector_roi_from_rows_lines(axial_mm: np.ndarray, lateral_mm: np.ndarray, rows, lines) -> SectorROI:
+    """SectorROI for RF rows r1..r2 x lines l1..l2 (0-based, inclusive), e.g. read back from an ROI
+    pickle: outline along the top row, down the last line, back along the bottom row, up the first.
+    depth_range_mm: rows r1 / r2 on the centre line."""
+    axial = np.asarray(axial_mm, dtype=float)
+    lateral = np.asarray(lateral_mm, dtype=float)
+    n_rows, n_lines = axial.shape
+    (r1, r2), (l1, l2) = sorted(int(v) for v in rows), sorted(int(v) for v in lines)
+    if not (0 <= r1 <= r2 < n_rows and 0 <= l1 <= l2 < n_lines):
+        raise ValueError(f"ROI rows {r1}-{r2} / lines {l1}-{l2} outside the {n_rows} x {n_lines} RF frame")
+    mid = int(np.sign(n_lines / 2) * np.floor(abs(n_lines / 2) + 0.5)) - 1
     cols = np.arange(l1, l2 + 1)
-    rows = np.arange(r1, r2 + 1)
-    xo = np.concatenate([lateral[r1, cols], lateral[rows, l2], lateral[r2, cols[::-1]], lateral[rows[::-1], l1]])
-    zo = np.concatenate([axial[r1, cols], axial[rows, l2], axial[r2, cols[::-1]], axial[rows[::-1], l1]])
+    rr = np.arange(r1, r2 + 1)
+    xo = np.concatenate([lateral[r1, cols], lateral[rr, l2], lateral[r2, cols[::-1]], lateral[rr[::-1], l1]])
+    zo = np.concatenate([axial[r1, cols], axial[rr, l2], axial[r2, cols[::-1]], axial[rr[::-1], l1]])
     return SectorROI(rows=(r1, r2), lines=(l1, l2), x_mm=xo, z_mm=zo,
-                     depth_range_mm=(float(centre[r1]), float(centre[r2])))
+                     depth_range_mm=(float(axial[r1, mid]), float(axial[r2, mid])))
 
 
 def check_sector_roi(intersect: FirstPassIntersect, roi: SectorROI) -> SectorROI:
@@ -206,3 +220,16 @@ def save_roi_pkl(path, image_data, roi: SectorROI, frame: int = 0, extra: Option
     with open(path, "wb") as f:
         pickle.dump(info, f)
     return path
+
+
+def load_roi_pkl_info(path) -> Optional[dict]:
+    """The first-pass details saved with a Power Guided ROI (save_roi_pkl): RF Rows, RF Lines,
+    Depth Range mm, Band MHz, ... None if the file is not such an ROI (e.g. a hand-drawn ROI)."""
+    try:
+        with open(path, "rb") as f:
+            info = pickle.load(f)
+    except Exception:
+        return None
+    if not isinstance(info, dict) or not all(k in info for k in ("RF Rows", "RF Lines", "Depth Range mm")):
+        return None
+    return info

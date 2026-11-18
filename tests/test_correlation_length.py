@@ -241,3 +241,27 @@ def test_sd_is_zero_for_one_measurement_and_nan_for_none():
         warnings.simplefilter("error")
         sd, mean = r.ax_std_mm, r.ax_mean_mm
     assert sd[0] == 0.0 and sd[1] > 0 and np.isnan(sd[2]) and np.isnan(mean[2])
+
+
+def test_line_range_measures_inside_an_roi():
+    rng = np.random.default_rng(9)
+    n_samples, n_lines = 500, 80
+    rf = rng.normal(size=(2, n_samples, n_lines))
+    axial, lateral = _positions(n_samples, n_lines)
+    from quantus.correlation_length.correlation import _lateral_positions
+    r = correlation_lengths(rf, axial, lateral, 3.0, 3.0, line_range=(10, 45), depth_range_mm=(6.0, 20.0))
+    expected = _lateral_positions((10 + 45) // 2, 5, 10, 45)   # 11-line windows inside lines 10-45
+    assert np.all(r.n_positions == len(expected)) and expected.min() - 5 >= 10 and expected.max() + 5 <= 45
+    assert r.line_range == (10, 45) and r.lateral_fraction is None
+    assert "A-lines 10-45" in r.describe_window()
+    w = r.recommended_window()
+    assert w["depth_range_mm"][0] >= 6.0 and w["depth_range_mm"][1] <= 20.0
+    # same as lateral_fraction when the range is the central region
+    from quantus.correlation_length.correlation import _central_region
+    first, last = _central_region(n_lines, _mid(n_lines), 0.5)
+    a = correlation_lengths(rf, axial, lateral, 3.0, 3.0, 5.0, 20.0, 4, lateral_fraction=0.5)
+    b = correlation_lengths(rf, axial, lateral, 3.0, 3.0, 5.0, 20.0, 4, line_range=(first, last))
+    assert (first + last) // 2 == _mid(n_lines)
+    np.testing.assert_allclose(a.lat_corr_mm, b.lat_corr_mm)
+    with pytest.raises(ValueError):
+        correlation_lengths(rf, axial, lateral, 3.0, 3.0, line_range=(70, 90))

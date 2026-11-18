@@ -76,6 +76,7 @@ class CorrelationLengths:
     frames: Optional[int] = None
     n_positions: Optional[np.ndarray] = None   # (n_depths,) lateral positions measured at each depth
     lateral_fraction: Optional[float] = None
+    line_range: Optional[tuple] = None         # (first, last) A-lines measured (0-based, inclusive), e.g. an ROI's
     window_mm_step: float = 0.1                # recommended windows in mm round to the nearest step
 
     @property
@@ -202,6 +203,8 @@ class CorrelationLengths:
             return f"{self.n_frames} frames"
         lo, hi = int(np.min(self.n_positions)), int(np.max(self.n_positions))
         pos = f"{lo}" if lo == hi else f"{lo}-{hi}"
+        if self.line_range is not None:
+            return f"{self.n_frames} frames x {pos} lateral positions in A-lines {self.line_range[0]}-{self.line_range[1]}"
         return (f"{self.n_frames} frames x {pos} lateral positions in the central "
                 f"{100 * self.lateral_fraction:g}% of the image")
 
@@ -433,6 +436,7 @@ def correlation_lengths(rf_frames: np.ndarray, axial_position_mm: np.ndarray, la
                         n_ax_locations: Optional[int] = None,
                         threshold: float = 0.5, ax_window_factor: float = 10.0, lat_window_factor: float = 5.0,
                         lateral_fraction: Optional[float] = None, depth_range_mm=None,
+                        line_range: Optional[Sequence[int]] = None,
                         keep_curves: bool = False) -> CorrelationLengths:
     """Axial and lateral correlation lengths vs. depth (port of CalcAxLatCorrelationCoeffCurves.m),
     on the centre A-line or averaged across the central part of the image.
@@ -463,6 +467,10 @@ def correlation_lengths(rf_frames: np.ndarray, axial_position_mm: np.ndarray, la
             fraction of the A-lines (always including the centre line; only positions whose
             whole window lies inside that region, the centre window always), and every frame at
             every position counts as one measurement in the mean and SD at that depth.
+        line_range: (first, last) A-lines (0-based, inclusive), e.g. an ROI's lines: windows
+            every half window across those lines, centred on their middle line, each lying
+            entirely inside them (the middle window always). Overrides lateral_fraction. With
+            depth_range_mm this measures inside an ROI.
         keep_curves: also return the mean correlation-vs-shift curve for every depth/measurement.
     """
     env, axial, lateral = _prepare(rf_frames, axial_position_mm, lateral_position_mm)
@@ -477,7 +485,15 @@ def correlation_lengths(rf_frames: np.ndarray, axial_position_mm: np.ndarray, la
     half_ax = (win_ax - 1) // 2
     ax_locs_1 = _axial_centres(centre_ax, n_samples, half_ax, window_length_mm,
                                ax_start_mm, ax_end_mm, n_ax_locations, depth_range_mm)
-    first, last = _central_region(n_lines, mid0, lateral_fraction)
+    if line_range is not None:
+        first, last = (int(v) for v in line_range)
+        if not 0 <= first <= last < n_lines:
+            raise ValueError(f"line_range {tuple(line_range)} outside the {n_lines} A-lines")
+        centre_col = (first + last) // 2
+    else:
+        first, last = _central_region(n_lines, mid0, lateral_fraction)
+        centre_col = mid0
+    several = line_range is not None or lateral_fraction is not None
 
     n_depths = len(ax_locs_1)
     lat_spacing = np.full(n_depths, np.nan)
@@ -491,10 +507,10 @@ def correlation_lengths(rf_frames: np.ndarray, axial_position_mm: np.ndarray, la
         win_lat = _odd_count(window_width_mm, d_lat)
         win_lines_all[k] = win_lat
         half_lat = (win_lat - 1) // 2
-        if mid0 - half_lat < 0 or mid0 + half_lat + 1 > n_lines:
-            raise ValueError(f"Window at depth index {loc_1} needs {win_lat} A-lines but only {n_lines} exist; "
-                             "reduce window_width_mm.")
-        cols = _lateral_positions(mid0, half_lat, first, last) if lateral_fraction is not None else np.array([mid0])
+        if centre_col - half_lat < 0 or centre_col + half_lat + 1 > n_lines:
+            raise ValueError(f"Window at depth index {loc_1} needs {win_lat} A-lines around line {centre_col} "
+                             f"but the image has {n_lines}; reduce window_width_mm.")
+        cols = _lateral_positions(centre_col, half_lat, first, last) if several else np.array([mid0])
         lat_k = np.full((n_frames, len(cols)), np.nan)
         ax_k = np.full((n_frames, len(cols)), np.nan)
         lat_c, ax_c = [], []
@@ -542,8 +558,9 @@ def correlation_lengths(rf_frames: np.ndarray, axial_position_mm: np.ndarray, la
         lat_corr_curves=curves.get("lat"),
         ax_corr_curves=curves.get("ax"),
         frames=n_frames,
-        n_positions=np.array([len(c) for c, *_ in per_depth]) if lateral_fraction is not None else None,
-        lateral_fraction=lateral_fraction,
+        n_positions=np.array([len(c) for c, *_ in per_depth]) if several else None,
+        lateral_fraction=None if line_range is not None else lateral_fraction,
+        line_range=None if line_range is None else (first, last),
     )
 
 
