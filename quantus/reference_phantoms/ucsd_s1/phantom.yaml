@@ -1,0 +1,32 @@
+name: UCSD S1
+description: >
+  Calibrated by the UW-Madison Quantitative Ultrasound Lab (Rosado-Mendez),
+  QULReport_UCSD_S1S2S3_09302026.pdf (UW-Madison QUL, report date 2026-09-30).
+
+# attenuation(f) = coef * f_MHz^exp + offset   [dB/cm]
+# Power-law least-squares fit in log-log space (same method as the report's trendline) to the
+# measured attenuation at 2.25, 3, 5, 7.5, 10 MHz. R^2 (linear, dB/cm) = 0.9977.
+# Valid over 2.25-10 MHz; outside that range it is an extrapolation.
+# Measured attenuation (mean +/- std):
+#    2.25 MHz: 1.520 +/- 0.020 dB/cm
+#    3.00 MHz: 2.130 +/- 0.004 dB/cm
+#    5.00 MHz: 3.940 +/- 0.020 dB/cm
+#    7.50 MHz: 7.180 +/- 0.020 dB/cm
+#   10.00 MHz: 10.590 +/- 0.030 dB/cm
+attenuation:
+  coef: 0.5109
+  exp: 1.3061
+  offset: 0.0
+
+# two columns: frequency [MHz], BSC [1/cm-sr]; 1.8-7.9 MHz
+bsc:
+  file: bsc.txt
+
+# Speed of sound [m/s] at 2.25, 3, 5, 7.5, 10 MHz (informational, not used by the loader)
+speed_of_sound_m_s: [1527.9, 1528.1, 1528.4, 1529.2, 1529.8]
+
+# Membrane transmission not provided in the calibration report. Add either
+#   file: transmission.txt   (two columns: frequency [MHz], amplitude transmission coefficient)
+# or
+#   thickness_um: <membrane thickness>   (analytic model in bsc_transmission_compensation)
+transmission: {}
