@@ -26,6 +26,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
+import re
+
 import numpy as np
 from scipy.signal import find_peaks
 
@@ -63,7 +65,9 @@ def find_bw_edges(ps: np.ndarray, freq: np.ndarray, above_noise_db: float = ABOV
                   dip_prominence: float = 6.0, guard: float = 0.0, avoid_freq: Sequence[float] = (),
                   drop_edge_bins: bool = True, search_above: float = -np.inf,
                   noise_method: str = "plateau", noise_band: Optional[Sequence[float]] = None,
-                  noise_pctl: float = 20.0, noise_tol_db: float = 3.0, min_noise_bins: int = 5):
+                  noise_pctl: float = 20.0, noise_tol_db: float = 3.0, min_noise_bins: int = 5,
+                  center_freq: Optional[float] = None, min_lobe_bins: int = 3, lobe_max_drop_db: float = 6.0,
+                  min_lobe_frac: float = 1 / 3):
     """Band edges of one power spectrum (port of FindBWEdges.m, S1Study 2026-11-13).
 
     ps: power spectrum, LINEAR units; freq: MHz. Returns (f_low, f_high, info) with info keys
@@ -78,6 +82,16 @@ def find_bw_edges(ps: np.ndarray, freq: np.ndarray, above_noise_db: float = ABOV
     clipping test. Edges: walk out from the peak while >= floor + above_noise_db, stopping at a
     notch (local minimum >= dip_prominence dB deep); then kept guard MHz clear of notches and
     avoid_freq. NaN edges if no band remains.
+
+    center_freq (MHz, e.g. the probe's transmit frequency; None = as FindBWEdges.m): when the
+    spectrum has more than one lobe -- runs of bins above the threshold, split at the detected
+    notches and avoid_freq -- the peak is the maximum of the lobe whose maximum is closest to
+    center_freq, not the global maximum. Only lobes at least min_lobe_bins wide whose maximum is
+    within lobe_max_drop_db of the global maximum and at least min_lobe_frac as wide as the widest
+    lobe compete (no weak side lobes, no slivers cut out of one hump by speckle ripple). E.g. a
+    dip splits an L20 spectrum and the lower lobe happens to be louder. The noise floor is still
+    found from the global maximum. info: lobes_mhz (each lobe's (f_low, f_high, f_peak)) and
+    peak_rule ('global maximum' or 'lobe closest to ... MHz').
     """
     ps = np.asarray(ps, dtype=float).ravel()
     freq = np.asarray(freq, dtype=float).ravel()
@@ -150,6 +164,31 @@ def find_bw_edges(ps: np.ndarray, freq: np.ndarray, above_noise_db: float = ABOV
     dips = freq[dip_idx]
     dip_set = set(int(i) for i in dip_idx)
 
+    # ---- several lobes: take the one whose peak is closest to the probe's centre frequency
+    peak_rule, lobes = "global maximum", []
+    if center_freq is not None and np.isfinite(center_freq):
+        split = set(int(i) for i in dip_idx)
+        for a in np.asarray(avoid_freq, dtype=float).ravel():
+            split.add(int(np.argmin(np.abs(freq - a))))
+        above = (s_search >= thr) & np.isfinite(s_search)
+        k = 0
+        while k < n:
+            if above[k] and k not in split:
+                a = k
+                while k + 1 < n and above[k + 1] and (k + 1) not in split:
+                    k += 1
+                pk = a + int(np.argmax(s[a:k + 1]))
+                if k - a + 1 >= min_lobe_bins and s[pk] >= peak_val - lobe_max_drop_db:
+                    lobes.append((a, k, pk))
+            k += 1
+        if lobes:
+            widest = max(b - a + 1 for a, b, _ in lobes)
+            lobes = [lb for lb in lobes if lb[1] - lb[0] + 1 >= min_lobe_frac * widest]
+        if len(lobes) > 1:
+            best = min(lobes, key=lambda lb: (abs(freq[lb[2]] - center_freq), -s[lb[2]]))
+            ip, peak_val = best[2], s[best[2]]
+            peak_rule = f"lobe closest to {center_freq:g} MHz"
+
     # ---- walk outward from the peak
     lo, low_by = ip, "threshold"
     while lo > 0 and s[lo - 1] >= thr:
@@ -181,18 +220,20 @@ def find_bw_edges(ps: np.ndarray, freq: np.ndarray, above_noise_db: float = ABOV
     info = dict(peak_freq=float(freq[ip]), noise_floor_db=float(noise_floor), threshold_db=float(thr),
                 signal_power_db=float(peak_val - thr), dips_mhz=dips, low_limited_by=low_by,
                 high_limited_by=high_by, peak_loc=ip, noise_method_used=method_used,
-                noise_band_mhz=noise_band_used, num_noise_bins=int(noise_idx.size), noise_flat=noise_flat)
+                noise_band_mhz=noise_band_used, num_noise_bins=int(noise_idx.size), noise_flat=noise_flat,
+                lobes_mhz=[(float(freq[a]), float(freq[b]), float(freq[p])) for a, b, p in lobes],
+                peak_rule=peak_rule)
     return f_low, f_high, info
 
 
-def _run_bw(ps, freq_axis, avoid_freq, above_noise_db, search_above, with_method=False):
+def _run_bw(ps, freq_axis, avoid_freq, above_noise_db, search_above, with_method=False, center_freq=None):
     """CalcFirstPassPowerSpectra RunBW: (f_low, f_high, peak_freq, noise_floor, snr = peak - floor)
     [+ the noise-floor method used, with_method=True]."""
     ps = np.asarray(ps, dtype=float).ravel()
     if np.any(np.isnan(ps)):
         return (np.nan,) * 5 + ((False,) if with_method else ())
     fl, fh, info = find_bw_edges(ps, freq_axis, above_noise_db=above_noise_db, avoid_freq=avoid_freq,
-                                 search_above=search_above)
+                                 search_above=search_above, center_freq=center_freq)
     snr = info["signal_power_db"] + (info["threshold_db"] - info["noise_floor_db"])
     out = (fl, fh, info["peak_freq"], info["noise_floor_db"], snr)
     # Nyquist-limited: no out-of-band noise plateau above the peak AND the band runs into the top
@@ -247,6 +288,7 @@ class FirstPass:
     num_lines: int
     avoid_freq: tuple = ()
     search_above: float = -np.inf
+    center_freq_mhz: Optional[float] = None   # probe centre frequency for find_bw_edges (None: global max)
     above_noise_db: float = ABOVE_NOISE_DB
     min_signal_power_db: float = MIN_SIGNAL_POWER_DB
     # (n_depths,) True where the depth-profile spectrum has no out-of-band noise plateau above the
@@ -268,6 +310,7 @@ def calc_first_pass(rf_frames: np.ndarray, axial_position_mm: np.ndarray, latera
                     n_ax_locations: Optional[int] = None, avoid_freq: Sequence[float] = (),
                     search_above: Optional[float] = None, ax_step_mm: Optional[float] = None,
                     sampling_frequency_mhz: Optional[float] = None, on_nyquist: str = "error",
+                    center_freq_mhz: Optional[float] = None,
                     block_lines: Optional[int] = None) -> FirstPass:
     """First-pass power spectra: depth profile and lateral-block map (port of CalcFirstPassPowerSpectra.m).
 
@@ -380,8 +423,8 @@ def calc_first_pass(rf_frames: np.ndarray, axial_position_mm: np.ndarray, latera
             block_ps[d, b] = p_line[:, block_start_1[b] - 1:block_end_1[b]].mean(axis=1)
 
     # ---- band edges and SNR
-    prof_m = [_run_bw(mean_ps[d], freq_axis, avoid, ABOVE_NOISE_DB, search, with_method=True)
-              for d in range(n_depths)]
+    prof_m = [_run_bw(mean_ps[d], freq_axis, avoid, ABOVE_NOISE_DB, search, with_method=True,
+                      center_freq=center_freq_mhz) for d in range(n_depths)]
     nyquist_limited = np.array([bool(m[5]) for m in prof_m])
     if nyquist_limited.any() and on_nyquist != "ignore":
         dl = depths[nyquist_limited]
@@ -394,8 +437,8 @@ def calc_first_pass(rf_frames: np.ndarray, axial_position_mm: np.ndarray, latera
         import warnings
         warnings.warn(msg, NyquistWarning, stacklevel=2)
     prof = np.array([m[:5] for m in prof_m])
-    blk = np.array([[_run_bw(block_ps[d, b], freq_axis, avoid, ABOVE_NOISE_DB, search) for b in range(n_blocks)]
-                    for d in range(n_depths)])
+    blk = np.array([[_run_bw(block_ps[d, b], freq_axis, avoid, ABOVE_NOISE_DB, search, center_freq=center_freq_mhz)
+                     for b in range(n_blocks)] for d in range(n_depths)])
     f_low, f_high, peak_freq, noise_floor, snr = (prof[:, k] for k in range(5))
     f_low_2d, f_high_2d, peak_freq_2d, _, snr_2d = (blk[..., k] for k in range(5))
 
@@ -413,14 +456,44 @@ def calc_first_pass(rf_frames: np.ndarray, axial_position_mm: np.ndarray, latera
         block_ps=block_ps, block_start=block_start_1 - 1, block_centre=block_centre_1 - 1,
         block_lines=block_lines, block_width_mm=block_width_mm, window_length_mm=window_length_mm,
         window_samples=win, fs_mhz=float(fs), delta_ax_mm=float(d_ax), num_frames=n_frames, num_lines=n_lines,
-        avoid_freq=avoid, search_above=search, nyquist_limited=nyquist_limited,
+        avoid_freq=avoid, search_above=search, nyquist_limited=nyquist_limited, center_freq_mhz=center_freq_mhz,
     )
+
+
+def probe_center_frequency_mhz(image_data) -> Optional[float]:
+    """The probe's centre frequency (MHz) for a loaded image: a center_frequency attribute (Hz) if the
+    loader set one, else the 'transmit frequency' in the Clarius rf.yml next to the scan
+    (C3 3.5, L15 10, L20 14 MHz). None if neither is available."""
+    fc = getattr(image_data, "center_frequency", None)
+    if fc:
+        return float(fc) / 1e6 if fc > 1e3 else float(fc)
+    scan_path = getattr(image_data, "scan_path", None)
+    if not scan_path:
+        return None
+    from pathlib import Path
+    p = Path(scan_path)
+    folder = p.with_name(p.stem + "_extracted") if p.suffix == ".tar" else (p if p.is_dir() else p.parent)
+    ymls = sorted(folder.glob("*rf.yml")) if folder.is_dir() else []
+    if p.suffix == ".raw" and p.with_suffix(".yml").is_file():
+        ymls = [p.with_suffix(".yml")]
+    for yml in ymls:
+        try:
+            text = yml.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        m = re.search(r"^\s*transmit frequency:\s*([-+]?\d*\.?\d+)", text, flags=re.MULTILINE)
+        if m:
+            return float(m.group(1))
+    return None
 
 
 def calc_first_pass_from_image(image_data, source: str = "phantom", frames: Optional[Sequence[int]] = None,
                                **kwargs) -> FirstPass:
     """calc_first_pass() on a loaded QuantUS UltrasoundRfImage ("phantom": every reference frame,
-    "scan": the scan's frames), with positions from positions_from_image()."""
+    "scan": the scan's frames), with positions from positions_from_image(). The first pass keeps
+    FindBWEdges' global-maximum peak (center_freq_mhz=None): its single-window spectra are speckly,
+    and the 6 dB notch detection splits one hump into halves, so the lobe rule would only swap halves.
+    The lobe rule is used for the multitaper band (power_spectrum_mtm), where spectra are smooth."""
     from .correlation import _frames_from_image, positions_from_image
 
     rf = _frames_from_image(image_data, source, frames)
@@ -484,6 +557,19 @@ def _trim_depths(fp: FirstPass, n: int) -> FirstPass:
 
     updates = {name: getattr(fp, name)[:n] for name in _PER_DEPTH_FIELDS if getattr(fp, name) is not None}
     return dataclasses.replace(fp, **updates)
+
+
+def with_usable_level(fp: FirstPass, min_signal_power_db: float) -> FirstPass:
+    """The same first pass with another usable level: a depth row / block is usable if it has a band and
+    its peak clears the band level (noise floor + above_noise_db) by min_signal_power_db, i.e. peak >=
+    noise floor + above_noise_db + min_signal_power_db (MATLAB: 10 + 5 = 15 dB). Uses the stored signal
+    powers, so nothing is recomputed; band edges (noise floor + above_noise_db) are unchanged."""
+    from dataclasses import replace
+    m = float(min_signal_power_db)
+    with np.errstate(invalid="ignore"):
+        usable = (fp.signal_power_db >= m) & ~np.isnan(fp.f_low)
+        usable_2d = (fp.signal_power_2d >= m) & ~np.isnan(fp.f_low_2d)
+    return replace(fp, usable=usable, usable_2d=usable_2d, min_signal_power_db=m)
 
 
 def intersect_first_pass(sample: FirstPass, reference: FirstPass) -> FirstPassIntersect:
@@ -598,7 +684,8 @@ def roi_band_check(intersect: FirstPassIntersect, x_poly, z_poly) -> ROIBand:
         if np.any(np.isnan(ps)):
             return np.nan, np.nan, np.nan
         fl, fh, info = find_bw_edges(ps, s.freq_axis, above_noise_db=s.above_noise_db,
-                                     avoid_freq=s.avoid_freq, search_above=s.search_above)
+                                     avoid_freq=s.avoid_freq, search_above=s.search_above,
+                                     center_freq=s.center_freq_mhz)
         return fl, fh, info["signal_power_db"]
 
     for i, r in enumerate(rows):

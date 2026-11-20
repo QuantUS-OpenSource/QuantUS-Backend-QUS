@@ -68,7 +68,8 @@ def power_spectral_estimation(rf_reference: np.ndarray, rf_sample: np.ndarray, a
                               correlation_kwargs: Optional[dict] = None, kappa: float = KAPPA,
                               avoid_freq: Sequence[float] = (), min_overlap_ax: float = MIN_OVERLAP_AX,
                               min_overlap_lat: float = MIN_OVERLAP_LAT, nfft: int = 1024,
-                              verbose: bool = False, progress=None) -> PowerSpectralEstimate:
+                              verbose: bool = False, progress=None,
+                              center_freq_mhz: Optional[float] = None) -> PowerSpectralEstimate:
     """Steps 1-5 above on arrays. rf_reference: (n_frames, samples, lines); rf_sample: one frame
     (samples, lines). roi_lines: (first, last) A-lines, 0-based inclusive. roi_depth_range_mm:
     ROI top / bottom on the centre line. roi_band_mhz: the ROI's first-pass band (fLow, fHigh).
@@ -131,7 +132,7 @@ def power_spectral_estimation(rf_reference: np.ndarray, rf_sample: np.ndarray, a
     freq = mtm_freq_axis(fs_mhz, nfft)
 
     t0 = time.time()
-    bw = roi_bandwidth(smp_ps, ref_ps, freq, **bw_options(params.avoid_freq, params.w_mhz))
+    bw = roi_bandwidth(smp_ps, ref_ps, freq, **bw_options(params.avoid_freq, params.w_mhz, center_freq_mhz))
     t["bandwidth"] = time.time() - t0
     return PowerSpectralEstimate(
         correlation=corr, ax_window_mm=ax_mm, lat_window_mm=lat_mm, parameters=params, grid=grid,
@@ -162,5 +163,7 @@ def power_spectral_estimation_from_image(image, roi, roi_band_mhz: Optional[Sequ
         dz = float(axial[2, axial.shape[1] // 2] - axial[1, axial.shape[1] // 2])
         fs_mhz = 1540.0 / (2 * dz * 1e-3) / 1e6
     ckw = _apply_preset(preset, dict(correlation_kwargs or {}))
+    from ..correlation_length.first_pass import probe_center_frequency_mhz
+    kwargs.setdefault("center_freq_mhz", probe_center_frequency_mhz(image))
     return power_spectral_estimation(ref, smp, axial, lateral, fs_mhz, roi.lines, roi.depth_range_mm,
                                      roi_band_mhz, correlation_kwargs=ckw, **kwargs)

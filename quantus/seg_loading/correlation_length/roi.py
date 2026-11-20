@@ -211,7 +211,9 @@ def save_roi_pkl(path, image_data, roi: SectorROI, frame: int = 0, extra: Option
         "Depth Range mm": tuple(float(v) for v in roi.depth_range_mm),
     }
     if roi.band is not None:
-        info.update({"Band MHz": (roi.band.f_low_roi, roi.band.f_high_roi),
+        lo, hi = float(roi.band.f_low_roi), float(roi.band.f_high_roi)
+        # no shared band (e.g. kept anyway after the ROI check): save None, not a reversed band
+        info.update({"Band MHz": (lo, hi) if valid_band((lo, hi)) else None,
                      "All Rows Usable": roi.band.all_rows_usable})
     if extra:
         info.update(extra)
@@ -220,6 +222,15 @@ def save_roi_pkl(path, image_data, roi: SectorROI, frame: int = 0, extra: Option
     with open(path, "wb") as f:
         pickle.dump(info, f)
     return path
+
+
+def valid_band(band) -> bool:
+    """A usable (f_low, f_high) MHz band: two finite values with f_high > f_low."""
+    try:
+        lo, hi = (float(v) for v in band)
+    except (TypeError, ValueError):
+        return False
+    return bool(np.isfinite(lo) and np.isfinite(hi) and hi > lo)
 
 
 def load_roi_pkl_info(path) -> Optional[dict]:

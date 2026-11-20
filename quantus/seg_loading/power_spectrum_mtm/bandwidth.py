@@ -25,13 +25,14 @@ from ..correlation_length.first_pass import find_bw_edges, inpolygon
 MIN_SIGNAL_POWER_DB = 5.0
 
 
-def bw_options(avoid_freq: Sequence[float] = (), w_mhz: float = 0.0) -> dict:
+def bw_options(avoid_freq: Sequence[float] = (), w_mhz: float = 0.0, center_freq: Optional[float] = None) -> dict:
     """FindBWEdges options of DetermineBandwidth.m: AvoidFreq, SearchAbove = max(AvoidFreq) (or
     -Inf), Guard = W (the multitaper smoothing spreads a null over +/-W), no automatic notch
-    detection (DipProminence = Inf)."""
+    detection (DipProminence = Inf). center_freq (MHz): with several lobes above the threshold,
+    use the lobe closest to it (find_bw_edges); None = global maximum, as the MATLAB."""
     avoid = tuple(np.atleast_1d(np.asarray(avoid_freq, dtype=float)).ravel())
     return dict(avoid_freq=avoid, search_above=max(avoid) if avoid else -np.inf, guard=float(w_mhz),
-                dip_prominence=np.inf)
+                dip_prominence=np.inf, center_freq=center_freq)
 
 
 def window_bands(spectra: np.ndarray, freq: np.ndarray, mask: Optional[np.ndarray] = None, **options):

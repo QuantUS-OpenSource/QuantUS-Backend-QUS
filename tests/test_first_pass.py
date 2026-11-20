@@ -208,3 +208,20 @@ def test_impossible_settings_raise_clear_errors():
         calc_first_pass(rf, axial, lateral, 1.0, 50.0, ax_step_mm=1.0)       # block wider than the image
     with pytest.raises(ValueError, match="window"):
         calc_first_pass(rf, axial, lateral, 1.0, 1.0, ax_start_mm=5.0, ax_end_mm=2.0, ax_step_mm=1.0)
+
+
+def test_with_usable_level_changes_only_usability():
+    from quantus.seg_loading.correlation_length.first_pass import with_usable_level, MIN_SIGNAL_POWER_DB
+    rng = np.random.default_rng(4)
+    fs, n_samples, n_lines = 40.0, 1200, 64
+    rf = _band_limited_rf(rng, 3, n_samples, n_lines, fs, (4, 8))
+    rf[:, :, 40:] = 0.3 * rng.normal(size=(3, n_samples, n_lines - 40))   # weaker region
+    axial, lateral = _linear_positions(n_samples, n_lines, fs)
+    fp = calc_first_pass(rf, axial, lateral, window_length_mm=2.0, block_width_mm=2.0, ax_step_mm=1.0)
+    same = with_usable_level(fp, MIN_SIGNAL_POWER_DB)
+    assert np.array_equal(same.usable_2d, fp.usable_2d) and np.array_equal(same.usable, fp.usable)
+    strict, loose = with_usable_level(fp, 15.0), with_usable_level(fp, 0.0)
+    assert strict.usable_2d.sum() <= fp.usable_2d.sum() <= loose.usable_2d.sum()
+    assert not np.any(strict.usable_2d & ~fp.usable_2d)                      # stricter only removes
+    assert np.array_equal(strict.f_low_2d, fp.f_low_2d, equal_nan=True)      # band edges unchanged
+    assert strict.min_signal_power_db == 15.0

@@ -83,5 +83,8 @@ def test_roi_bandwidth_shared_band_and_usable_windows():
 
 
 def test_bw_options_match_determine_bandwidth():
-    assert bw_options() == dict(avoid_freq=(), search_above=-np.inf, guard=0.0, dip_prominence=np.inf)
+    # center_freq None = global maximum, as DetermineBandwidth.m
+    assert bw_options() == dict(avoid_freq=(), search_above=-np.inf, guard=0.0, dip_prominence=np.inf,
+                                center_freq=None)
     assert bw_options([7.5], 0.3)["search_above"] == 7.5
+    assert bw_options([7.5], 0.3, center_freq=14.0)["center_freq"] == 14.0
